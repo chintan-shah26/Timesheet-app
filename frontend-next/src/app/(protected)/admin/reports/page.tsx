@@ -13,6 +13,7 @@ import {
   getMonthlyReport,
   getEmployeeMonthlyReport,
   getUsers,
+  getTeams,
 } from "@/api/admin";
 import { API_BASE_URL } from "@/config/api-client";
 import AuthGate from "@/components/common/auth-gate";
@@ -99,9 +100,11 @@ const employeeColumns: ColumnDef<TimesheetEntry>[] = [
 export default function MonthlyReportPage() {
   const [month, setMonth] = useState(defaultMonth);
   const [selectedWorker, setSelectedWorker] = useState("");
+  const [selectedTeam, setSelectedTeam] = useState("");
   const [fetchParams, setFetchParams] = useState<{
     month: string;
     worker: string;
+    team: string;
   } | null>(null);
 
   const { data: workers = [] } = useQuery({
@@ -109,10 +112,16 @@ export default function MonthlyReportPage() {
     queryFn: getUsers,
   });
 
+  const { data: teams = [] } = useQuery({
+    queryKey: ["admin-teams"],
+    queryFn: getTeams,
+  });
+
   const { data: teamReport, isFetching: teamFetching } =
     useQuery<MonthlyReport>({
-      queryKey: ["monthly-report", fetchParams?.month],
-      queryFn: () => getMonthlyReport(fetchParams!.month),
+      queryKey: ["monthly-report", fetchParams?.month, fetchParams?.team],
+      queryFn: () =>
+        getMonthlyReport(fetchParams!.month, fetchParams!.team || undefined),
       enabled: !!fetchParams && !fetchParams.worker,
     });
 
@@ -228,8 +237,31 @@ export default function MonthlyReportPage() {
                 ))}
               </Select>
             </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-text-secondary">
+                Team
+              </label>
+              <Select
+                value={selectedTeam}
+                onChange={(e) => setSelectedTeam(e.target.value)}
+                className="w-40"
+              >
+                <option value="">All teams</option>
+                {teams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <Button
-              onClick={() => setFetchParams({ month, worker: selectedWorker })}
+              onClick={() =>
+                setFetchParams({
+                  month,
+                  worker: selectedWorker,
+                  team: selectedTeam,
+                })
+              }
               disabled={isLoading}
             >
               {isLoading ? "Loading…" : "Generate Report"}

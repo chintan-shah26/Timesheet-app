@@ -7,6 +7,7 @@ import {
   ClipboardCheck,
   BarChart2,
   Users,
+  UsersRound,
   CalendarDays,
   Umbrella,
   LogOut,
@@ -31,9 +32,14 @@ const workerNav: NavItem[] = [
 const adminNav: NavItem[] = [
   { href: "/admin", label: "Review", icon: ClipboardCheck },
   { href: "/admin/reports", label: "Reports", icon: BarChart2 },
+  { href: "/admin/teams", label: "Teams", icon: UsersRound },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/holidays", label: "Holidays", icon: CalendarDays },
   { href: "/admin/leave", label: "Leave", icon: Umbrella },
+];
+
+const teamLeadNav: NavItem[] = [
+  { href: "/admin", label: "Review", icon: ClipboardCheck },
 ];
 
 export default function Sidebar() {
@@ -42,7 +48,12 @@ export default function Sidebar() {
 
   if (!user) return null;
 
-  const navItems = user.role === "admin" ? adminNav : workerNav;
+  const navItems =
+    user.role === "admin"
+      ? adminNav
+      : user.role === "team_lead"
+        ? teamLeadNav
+        : workerNav;
 
   // Exact match only — prevents /admin highlighting while on /admin/reports
   const isActive = (href: string) => pathname === href;

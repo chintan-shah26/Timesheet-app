@@ -12,7 +12,7 @@ async function initSchema() {
       email         TEXT UNIQUE NOT NULL,
       name          TEXT NOT NULL,
       password_hash TEXT NOT NULL,
-      role          TEXT NOT NULL DEFAULT 'worker',
+      role          TEXT NOT NULL DEFAULT 'worker' CHECK (role IN ('worker', 'team_lead', 'admin')),
       created_at    TIMESTAMPTZ DEFAULT NOW()
     );
 
@@ -54,6 +54,21 @@ async function initSchema() {
       created_at     TIMESTAMPTZ DEFAULT NOW(),
       updated_at     TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(user_id, year)
+    );
+
+    CREATE TABLE IF NOT EXISTS teams (
+      id          SERIAL PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS team_members (
+      team_id   INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      is_lead   BOOLEAN NOT NULL DEFAULT FALSE,
+      joined_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id)
     );
   `);
 }
