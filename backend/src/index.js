@@ -1,24 +1,30 @@
-require('dotenv').config();
-const Sentry = require('@sentry/node');
-const express = require('express');
-const session = require('express-session');
-const cors = require('cors');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const pgSession = require('connect-pg-simple')(session);
-const { pool, initSchema } = require('./db');
+require("dotenv").config();
+
+if (!process.env.SESSION_SECRET) {
+  console.error("Fatal: SESSION_SECRET environment variable is required");
+  process.exit(1);
+}
+
+const Sentry = require("@sentry/node");
+const express = require("express");
+const session = require("express-session");
+const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const pgSession = require("connect-pg-simple")(session);
+const { pool, initSchema } = require("./db");
 
 Sentry.init({
-  dsn: process.env.SENTRY_DSN || '',
-  environment: process.env.NODE_ENV || 'development',
+  dsn: process.env.SENTRY_DSN || "",
+  environment: process.env.NODE_ENV || "development",
   // Only send errors in production unless DSN is explicitly set
-  enabled: !!(process.env.SENTRY_DSN),
+  enabled: !!process.env.SENTRY_DSN,
   tracesSampleRate: 0.2, // capture 20% of transactions for performance
 });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 // Security headers
 app.use(helmet());
@@ -29,7 +35,7 @@ const generalLimiter = rateLimit({
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later' },
+  message: { error: "Too many requests, please try again later" },
 });
 
 const authLimiter = rateLimit({
@@ -37,7 +43,7 @@ const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many login attempts, please try again later' },
+  message: { error: "Too many login attempts, please try again later" },
 });
 
 // Middleware
@@ -49,25 +55,27 @@ app.use(
   session({
     store: new pgSession({
       pool,
-      tableName: 'sessions',
+      tableName: "sessions",
       createTableIfMissing: true,
     }),
-    secret: process.env.SESSION_SECRET || 'change-me-in-production',
+    secret: process.env.SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     },
-  })
+  }),
 );
 
 // Attach user to req from session
 app.use(async (req, res, next) => {
   if (req.session.userId) {
     const result = await pool.query(
-      'SELECT id, email, name, role FROM users WHERE id = $1',
-      [req.session.userId]
+      "SELECT id, email, name, role FROM users WHERE id = $1",
+      [req.session.userId],
     );
     req.user = result.rows[0] || null;
   } else {
@@ -77,14 +85,14 @@ app.use(async (req, res, next) => {
 });
 
 // Routes
-app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/setup', authLimiter);
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/timesheets', require('./routes/timesheets'));
-app.use('/api/admin', require('./routes/admin'));
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/setup", authLimiter);
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/timesheets", require("./routes/timesheets"));
+app.use("/api/admin", require("./routes/admin"));
 
 // Health check
-app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 // Sentry error handler — must be before any other error middleware
 Sentry.setupExpressErrorHandler(app);
@@ -94,16 +102,21 @@ app.use((err, req, res, next) => {
   console.error(err);
   const status = err.status || err.statusCode || 500;
   res.status(status).json({
-    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    error:
+      process.env.NODE_ENV === "production"
+        ? "Internal server error"
+        : err.message,
   });
 });
 
 // Init DB schema then start server
 initSchema()
   .then(() => {
-    app.listen(PORT, () => console.log(`Backend running on http://localhost:${PORT}`));
+    app.listen(PORT, () =>
+      console.log(`Backend running on http://localhost:${PORT}`),
+    );
   })
-  .catch(err => {
-    console.error('Failed to initialize database:', err);
+  .catch((err) => {
+    console.error("Failed to initialize database:", err);
     process.exit(1);
   });

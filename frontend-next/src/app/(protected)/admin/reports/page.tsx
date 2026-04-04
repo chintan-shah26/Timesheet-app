@@ -14,6 +14,7 @@ import {
   getEmployeeMonthlyReport,
   getUsers,
 } from "@/api/admin";
+import { API_BASE_URL } from "@/config/api-client";
 import AuthGate from "@/components/common/auth-gate";
 import Button from "@/components/common/button";
 import Card from "@/components/common/card";
@@ -122,7 +123,7 @@ export default function MonthlyReportPage() {
   const isLoading = teamFetching || empFetching;
   const hasData = !!teamReport || !!employeeReport;
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+  const apiBase = API_BASE_URL;
 
   function handleExportCsv() {
     if (employeeReport) {

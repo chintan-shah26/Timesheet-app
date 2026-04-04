@@ -68,10 +68,14 @@ export default function AdminDashboardPage() {
   });
 
   const openSheet = async (t: TimesheetSummary) => {
-    const full = await getAdminTimesheet(t.id);
-    setSelected(full);
-    setRejectMode(false);
-    setRejectNote("");
+    try {
+      const full = await getAdminTimesheet(t.id);
+      setSelected(full);
+      setRejectMode(false);
+      setRejectNote("");
+    } catch {
+      alert("Failed to load timesheet. Please try again.");
+    }
   };
 
   const invalidate = () =>
@@ -85,6 +89,7 @@ export default function AdminDashboardPage() {
       void invalidate();
       setSelected(null);
     },
+    onError: () => alert("Approve failed. Please try again."),
   });
 
   const rejectMutation = useMutation({
@@ -93,6 +98,7 @@ export default function AdminDashboardPage() {
       void invalidate();
       setSelected(null);
     },
+    onError: () => alert("Reject failed. Please try again."),
   });
 
   // Read-only form provider for DayRow in the modal
@@ -237,7 +243,7 @@ export default function AdminDashboardPage() {
                   <tr
                     key={row.id}
                     className="cursor-pointer border-b border-border last:border-0 hover:bg-surface-alt"
-                    onClick={() => openSheet(row.original)}
+                    onClick={() => void openSheet(row.original)}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className="px-4 py-3 text-text-primary">
@@ -293,8 +299,8 @@ export default function AdminDashboardPage() {
                 ))}
               </div>
               <FormProvider {...readOnlyMethods}>
-                {selected.entries.map((_, i) => (
-                  <DayRow key={i} index={i} readOnly />
+                {selected.entries.map((entry, i) => (
+                  <DayRow key={entry.date} index={i} readOnly />
                 ))}
               </FormProvider>
             </Card>

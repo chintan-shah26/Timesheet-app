@@ -69,7 +69,7 @@ export default function LoginPage() {
             </label>
             <Input
               id="email"
-              type="text"
+              type="email"
               placeholder="you@example.com"
               autoFocus
               {...register("email", { required: "Email is required" })}

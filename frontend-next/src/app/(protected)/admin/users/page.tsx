@@ -80,9 +80,10 @@ export default function ManageUsersPage() {
 
   // Role change
   const roleMutation = useMutation({
-    mutationFn: ({ id, role }: { id: number; role: string }) =>
+    mutationFn: ({ id, role }: { id: number; role: Role }) =>
       changeUserRole(id, role),
     onSuccess: () => void invalidate(),
+    onError: () => alert("Failed to change role. Please try again."),
   });
 
   // Reset password form
@@ -100,6 +101,7 @@ export default function ManageUsersPage() {
       setResetTarget(null);
       resetPasswordForm();
     },
+    onError: () => alert("Failed to reset password. Please try again."),
   });
 
   // Delete
@@ -109,6 +111,7 @@ export default function ManageUsersPage() {
       void invalidate();
       setDeleteTarget(null);
     },
+    onError: () => alert("Failed to delete user. Please try again."),
   });
 
   const columns: ColumnDef<User>[] = [
@@ -130,7 +133,7 @@ export default function ManageUsersPage() {
           <Select
             value={u.role}
             onChange={(e) =>
-              roleMutation.mutate({ id: u.id, role: e.target.value })
+              roleMutation.mutate({ id: u.id, role: e.target.value as Role })
             }
             className="w-auto"
           >
@@ -244,7 +247,10 @@ export default function ManageUsersPage() {
                   <Input
                     type="password"
                     placeholder="min. 8 chars"
-                    {...regCreate("password", { required: "Required" })}
+                    {...regCreate("password", {
+                      required: "Required",
+                      minLength: { value: 8, message: "Minimum 8 characters" },
+                    })}
                   />
                   {createErrors.password && (
                     <p className="mt-1 text-xs text-danger">
@@ -364,7 +370,10 @@ export default function ManageUsersPage() {
                   type="password"
                   placeholder="min. 8 characters"
                   autoFocus
-                  {...regReset("password", { required: "Required" })}
+                  {...regReset("password", {
+                    required: "Required",
+                    minLength: { value: 8, message: "Minimum 8 characters" },
+                  })}
                 />
               </div>
               <div className="flex gap-3">
