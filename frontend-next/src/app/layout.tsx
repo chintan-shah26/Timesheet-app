@@ -14,7 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body>
+      {/* suppressHydrationWarning: browser extensions (password managers, etc.)
+          inject attributes into <body> before React hydrates, causing mismatches.
+          This suppresses those warnings one level deep without affecting children. */}
+      <body suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>
