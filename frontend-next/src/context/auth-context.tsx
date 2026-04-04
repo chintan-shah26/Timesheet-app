@@ -56,8 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await apiLogout();
+    queryClient.clear();
     setUserOverride(null);
-    queryClient.setQueryData(AUTH_QUERY_KEY, null);
   }, [queryClient]);
 
   return (

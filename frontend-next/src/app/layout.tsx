@@ -1,9 +1,5 @@
-"use client";
-
-import { useState } from "react";
 import { Inter } from "next/font/google";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { AuthProvider } from "@/context/auth-context";
+import Providers from "@/components/providers";
 import "./globals.css";
 
 const inter = Inter({
@@ -16,24 +12,10 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            retry: 1,
-            staleTime: 30_000,
-          },
-        },
-      }),
-  );
-
   return (
     <html lang="en" className={inter.variable}>
       <body>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>{children}</AuthProvider>
-        </QueryClientProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
