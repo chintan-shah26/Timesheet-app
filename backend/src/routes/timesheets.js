@@ -43,24 +43,87 @@ router.get("/:id", requireAuth, async (req, res) => {
   res.json({ ...sheet, entries: entries.rows });
 });
 
-// Create new timesheet for a week
+// Get leave balance for the authenticated worker
+router.get("/leave-balance", requireAuth, async (req, res) => {
+  const year = req.query.year
+    ? parseInt(req.query.year)
+    : new Date().getFullYear();
+  if (!Number.isInteger(year) || year < 2000 || year > 2100)
+    return res.status(400).json({ error: "Invalid year" });
+
+  const balanceResult = await pool.query(
+    "SELECT allocated_days FROM leave_balances WHERE user_id = $1 AND year = $2",
+    [req.user.id, year],
+  );
+  const allocated_days = balanceResult.rows[0]?.allocated_days ?? 0;
+
+  const usedResult = await pool.query(
+    `SELECT COUNT(*) AS used_days
+     FROM timesheet_entries e
+     JOIN timesheets t ON t.id = e.timesheet_id
+     WHERE t.user_id = $1
+       AND e.work_type = 'Leave'
+       AND e.is_present = TRUE
+       AND EXTRACT(YEAR FROM e.date) = $2
+       AND t.status IN ('submitted', 'approved')`,
+    [req.user.id, year],
+  );
+  const used_days = parseInt(usedResult.rows[0].used_days) || 0;
+
+  res.json({
+    year,
+    allocated_days,
+    used_days,
+    remaining_days: Math.max(0, allocated_days - used_days),
+  });
+});
+
+// Create new timesheet for a week (pre-fills holiday entries)
 router.post("/", requireAuth, async (req, res) => {
   const { week_start } = req.body;
   if (!week_start)
     return res.status(400).json({ error: "week_start required" });
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query("BEGIN");
+
+    const result = await client.query(
       "INSERT INTO timesheets (user_id, week_start) VALUES ($1, $2) RETURNING *",
       [req.user.id, week_start],
     );
-    res.status(201).json(result.rows[0]);
+    const sheet = result.rows[0];
+
+    // Create 7 entries (Mon–Sun), pre-filling any public holidays
+    const weekDates = await client.query(
+      `SELECT d::DATE::TEXT AS date,
+              EXISTS(
+                SELECT 1 FROM public_holidays ph WHERE ph.date = d::DATE
+              ) AS is_holiday
+       FROM generate_series($1::DATE, $1::DATE + INTERVAL '6 days', '1 day') AS d`,
+      [week_start],
+    );
+
+    for (const { date, is_holiday } of weekDates.rows) {
+      await client.query(
+        `INSERT INTO timesheet_entries (timesheet_id, date, is_present, work_type)
+         VALUES ($1, $2, false, $3)
+         ON CONFLICT (timesheet_id, date) DO NOTHING`,
+        [sheet.id, date, is_holiday ? "Holiday" : null],
+      );
+    }
+
+    await client.query("COMMIT");
+    res.status(201).json(sheet);
   } catch (err) {
+    await client.query("ROLLBACK");
     if (err.code === "23505")
       return res
         .status(409)
         .json({ error: "Timesheet for this week already exists" });
     throw err;
+  } finally {
+    client.release();
   }
 });
 
@@ -125,6 +188,91 @@ router.post("/:id/recall", requireAuth, async (req, res) => {
     [sheet.id],
   );
   res.json({ ok: true });
+});
+
+// Copy entries from prior week's timesheet into this draft
+router.post("/:id/copy-last-week", requireAuth, async (req, res) => {
+  const sheetId = Number(req.params.id);
+  if (!Number.isInteger(sheetId) || sheetId <= 0)
+    return res.status(400).json({ error: "Invalid timesheet id" });
+
+  const sheet = await fetchSheet(sheetId, req.user.id);
+  if (!sheet) return res.status(404).json({ error: "Not found" });
+  if (sheet.status !== "draft")
+    return res
+      .status(409)
+      .json({ error: "Cannot copy into a submitted timesheet" });
+
+  // Find the previous week's timesheet
+  const prevResult = await pool.query(
+    `SELECT * FROM timesheets
+     WHERE user_id = $1 AND week_start = $2::DATE - INTERVAL '7 days'`,
+    [req.user.id, sheet.week_start],
+  );
+  const prevSheet = prevResult.rows[0];
+  if (!prevSheet)
+    return res.status(404).json({ error: "No previous week timesheet found" });
+
+  const prevEntries = await pool.query(
+    "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
+    [prevSheet.id],
+  );
+  if (prevEntries.rows.length === 0)
+    return res.status(404).json({ error: "Previous week has no entries" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    for (const prev of prevEntries.rows) {
+      // Map to current week (always exactly 7 days later)
+      const dateResult = await client.query(
+        "SELECT ($1::DATE + INTERVAL '7 days')::DATE::TEXT AS d",
+        [prev.date],
+      );
+      const curDate = dateResult.rows[0].d;
+
+      // Skip entries the worker has already edited
+      const existing = await client.query(
+        "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 AND date = $2",
+        [sheet.id, curDate],
+      );
+      const row = existing.rows[0];
+      if (row && (row.is_present || row.work_type || row.hours || row.notes))
+        continue;
+
+      await client.query(
+        `INSERT INTO timesheet_entries (timesheet_id, date, is_present, hours, work_type, notes)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (timesheet_id, date) DO UPDATE SET
+           is_present = EXCLUDED.is_present,
+           hours      = EXCLUDED.hours,
+           work_type  = EXCLUDED.work_type,
+           notes      = EXCLUDED.notes`,
+        [
+          sheet.id,
+          curDate,
+          prev.is_present,
+          prev.hours ?? null,
+          prev.work_type ?? null,
+          prev.notes ?? null,
+        ],
+      );
+    }
+
+    await client.query("COMMIT");
+
+    const updatedEntries = await pool.query(
+      "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
+      [sheet.id],
+    );
+    res.json({ ok: true, entries: updatedEntries.rows });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 });
 
 // Submit timesheet for review

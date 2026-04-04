@@ -7,6 +7,8 @@ import {
   ClipboardCheck,
   BarChart2,
   Users,
+  CalendarDays,
+  Umbrella,
   LogOut,
   type LucideProps,
 } from "lucide-react";
@@ -30,6 +32,8 @@ const adminNav: NavItem[] = [
   { href: "/admin", label: "Review", icon: ClipboardCheck },
   { href: "/admin/reports", label: "Reports", icon: BarChart2 },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/holidays", label: "Holidays", icon: CalendarDays },
+  { href: "/admin/leave", label: "Leave", icon: Umbrella },
 ];
 
 export default function Sidebar() {

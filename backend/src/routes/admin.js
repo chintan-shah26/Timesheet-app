@@ -386,6 +386,129 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+// List public holidays (optional ?year=YYYY filter)
+router.get("/holidays", requireAdmin, async (req, res) => {
+  const { year } = req.query;
+  if (year) {
+    const yearInt = parseInt(year);
+    if (!Number.isInteger(yearInt) || yearInt < 2000 || yearInt > 2100)
+      return res.status(400).json({ error: "Invalid year" });
+    const result = await pool.query(
+      "SELECT * FROM public_holidays WHERE EXTRACT(YEAR FROM date) = $1 ORDER BY date",
+      [yearInt],
+    );
+    return res.json(result.rows);
+  }
+  const result = await pool.query(
+    "SELECT * FROM public_holidays ORDER BY date",
+  );
+  res.json(result.rows);
+});
+
+// Create a public holiday
+router.post("/holidays", requireAdmin, async (req, res) => {
+  const { date, name } = req.body;
+  if (!date || !name?.trim())
+    return res.status(400).json({ error: "date and name are required" });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+    return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+
+  try {
+    const result = await pool.query(
+      "INSERT INTO public_holidays (date, name) VALUES ($1, $2) RETURNING *",
+      [date, name.trim()],
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === "23505")
+      return res
+        .status(409)
+        .json({ error: "A holiday already exists for this date" });
+    throw err;
+  }
+});
+
+// Delete a public holiday
+router.delete("/holidays/:id", requireAdmin, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0)
+    return res.status(400).json({ error: "Invalid id" });
+
+  const result = await pool.query("DELETE FROM public_holidays WHERE id = $1", [
+    id,
+  ]);
+  if (result.rowCount === 0)
+    return res.status(404).json({ error: "Holiday not found" });
+  res.json({ ok: true });
+});
+
+// List leave balances for all workers (optional ?year=YYYY)
+router.get("/leave-balances", requireAdmin, async (req, res) => {
+  const year = req.query.year
+    ? parseInt(req.query.year)
+    : new Date().getFullYear();
+  if (!Number.isInteger(year) || year < 2000 || year > 2100)
+    return res.status(400).json({ error: "Invalid year" });
+
+  const result = await pool.query(
+    `SELECT u.id AS user_id, u.name, u.email,
+            COALESCE(lb.allocated_days, 0) AS allocated_days,
+            COUNT(CASE
+              WHEN te.work_type = 'Leave'
+               AND te.is_present = TRUE
+               AND EXTRACT(YEAR FROM te.date) = $1
+               AND t.status IN ('submitted', 'approved')
+              THEN 1
+            END) AS used_days
+     FROM users u
+     LEFT JOIN leave_balances lb ON lb.user_id = u.id AND lb.year = $1
+     LEFT JOIN timesheets t ON t.user_id = u.id
+     LEFT JOIN timesheet_entries te ON te.timesheet_id = t.id
+     WHERE u.role = 'worker'
+     GROUP BY u.id, u.name, u.email, lb.allocated_days
+     ORDER BY u.name`,
+    [year],
+  );
+  res.json(result.rows);
+});
+
+// Set leave balance for a worker/year (upsert)
+router.post("/leave-balances", requireAdmin, async (req, res) => {
+  const userId = Number(req.body.user_id);
+  const year = Number(req.body.year);
+  const days = Number(req.body.allocated_days);
+
+  if (!Number.isInteger(userId) || userId <= 0)
+    return res
+      .status(400)
+      .json({ error: "user_id must be a positive integer" });
+  if (!Number.isInteger(year) || year < 2000 || year > 2100)
+    return res
+      .status(400)
+      .json({ error: "year must be between 2000 and 2100" });
+  if (!Number.isInteger(days) || days < 0)
+    return res
+      .status(400)
+      .json({ error: "allocated_days must be a non-negative integer" });
+
+  const userCheck = await pool.query(
+    "SELECT id FROM users WHERE id = $1 AND role = 'worker'",
+    [userId],
+  );
+  if (!userCheck.rows[0])
+    return res.status(404).json({ error: "Worker not found" });
+
+  await pool.query(
+    `INSERT INTO leave_balances (user_id, year, allocated_days, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (user_id, year) DO UPDATE SET
+       allocated_days = EXCLUDED.allocated_days,
+       updated_at = NOW()`,
+    [userId, year, days],
+  );
+  res.json({ ok: true });
+});
+
 // Reset a user's password
 router.patch("/users/:id/password", requireAdmin, async (req, res) => {
   const { password } = req.body;
