@@ -13,7 +13,7 @@ export default function Card({ children, className, overflow }: CardProps) {
   return (
     <div
       className={clsx(
-        "rounded-lg border border-border bg-surface shadow-sm",
+        "rounded-lg border border-border bg-background shadow-sm",
         overflow && "overflow-x-auto",
         className,
       )}
