@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────
+# LOCAL DEVELOPMENT
+# Run: caddy run --config Caddyfile
+# Access: https://localhost (Caddy auto-generates a local TLS cert)
+# ─────────────────────────────────────────────
+localhost {
+	# Serve the built frontend (run `npm run build` in frontend/ first)
+	root * ./frontend/dist
+	file_server
+
+	# Proxy all API requests to the Express backend
+	reverse_proxy /api/* localhost:3001
+
+	# SPA fallback — send all unmatched routes to index.html
+	try_files {path} /index.html
+
+	# Compression
+	encode gzip
+}
+
+# ─────────────────────────────────────────────
+# PRODUCTION
+# Replace `yourdomain.com` with your real domain.
+# Caddy will auto-obtain and renew a Let's Encrypt TLS cert.
+# Ensure DNS A record points to this server's IP before starting.
+# ─────────────────────────────────────────────
+# yourdomain.com {
+# 	root * /var/www/timesheet/frontend/dist
+# 	file_server
+#
+# 	reverse_proxy /api/* localhost:3001
+#
+# 	try_files {path} /index.html
+#
+# 	encode gzip
+#
+# 	# Security headers (Caddy adds some automatically via TLS,
+# 	# these are additional hardening)
+# 	header {
+# 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+# 		X-Frame-Options "DENY"
+# 		X-Content-Type-Options "nosniff"
+# 	}
+# }
