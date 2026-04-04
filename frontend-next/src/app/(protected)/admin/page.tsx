@@ -10,11 +10,22 @@ import {
 } from "@tanstack/react-table";
 import { format, parseISO, addDays } from "date-fns";
 import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
+import {
   getAdminTimesheets,
   getAdminTimesheet,
   approveTimesheet,
   rejectTimesheet,
   bulkApproveTimesheets,
+  getAdminWeeklySummary,
+  getAdminTimesheetPdfUrl,
   getUsers,
   getTeams,
 } from "@/api/admin";
@@ -39,6 +50,10 @@ function weekLabel(weekStart: string) {
   return `${format(mon, "MMM d")} – ${format(addDays(mon, 6), "MMM d, yyyy")}`;
 }
 
+function shortWeek(weekStart: string) {
+  return format(parseISO(weekStart), "MMM d");
+}
+
 type Tab = "pending" | "all";
 
 const QUERY_KEYS = {
@@ -46,6 +61,7 @@ const QUERY_KEYS = {
     ["admin-timesheets", tab, month, worker, team] as const,
   workers: ["admin-workers"] as const,
   teams: ["admin-teams"] as const,
+  weeklySummary: (team: string) => ["admin-weekly-summary", team] as const,
 };
 
 export default function AdminDashboardPage() {
@@ -88,6 +104,11 @@ export default function AdminDashboardPage() {
         user_id: filterWorker || undefined,
         team_id: filterTeam || undefined,
       }),
+  });
+
+  const { data: weeklySummary = [] } = useQuery({
+    queryKey: QUERY_KEYS.weeklySummary(filterTeam),
+    queryFn: () => getAdminWeeklySummary(8, filterTeam || undefined),
   });
 
   // Clear selection when tab/filters change
@@ -178,6 +199,11 @@ export default function AdminDashboardPage() {
     });
   };
 
+  const chartData = weeklySummary.map((w) => ({
+    week: shortWeek(w.week_start),
+    hours: Number(w.total_hours),
+  }));
+
   const columns: ColumnDef<TimesheetSummary>[] = [
     {
       id: "select",
@@ -258,6 +284,38 @@ export default function AdminDashboardPage() {
             <p className="mt-0.5 text-sm text-text-secondary">
               Review and approve submitted timesheets
             </p>
+          </div>
+        )}
+
+        {/* Team weekly hours chart */}
+        {chartData.length > 0 && (
+          <div className="mb-6">
+            <Card>
+              <div className="px-4 pt-4 pb-2">
+                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                  Team Weekly Hours (last 8 weeks)
+                </p>
+                <ResponsiveContainer width="100%" height={140}>
+                  <BarChart data={chartData} barSize={18}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="var(--color-border)"
+                    />
+                    <XAxis dataKey="week" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} width={32} />
+                    <Tooltip
+                      contentStyle={{ fontSize: 12 }}
+                      formatter={(v) => [`${Number(v)}h`, "Total Hours"]}
+                    />
+                    <Bar
+                      dataKey="hours"
+                      fill="var(--color-accent)"
+                      radius={[3, 3, 0, 0]}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Card>
           </div>
         )}
 
@@ -478,6 +536,17 @@ export default function AdminDashboardPage() {
                 ))}
               </FormProvider>
             </Card>
+
+            <div className="mb-3">
+              <a
+                href={getAdminTimesheetPdfUrl(selected.id)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface hover:text-text-primary"
+              >
+                Download PDF
+              </a>
+            </div>
 
             {selected.status === "submitted" && !rejectMode && (
               <div className="flex gap-3">

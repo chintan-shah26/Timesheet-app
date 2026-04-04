@@ -11,6 +11,7 @@ import {
   submitTimesheet,
   recallTimesheet,
   copyLastWeek,
+  getTimesheetPdfUrl,
 } from "@/api/timesheets";
 import Badge from "@/components/common/badge";
 import Button from "@/components/common/button";
@@ -128,6 +129,8 @@ export default function WeeklyTimesheetPage() {
     (s, e) => s + (e.is_present && e.hours ? Number(e.hours) : 0),
     0,
   );
+  const totalOvertime = sheet.total_overtime_hours ?? 0;
+  const threshold = sheet.overtime_threshold ?? 8;
 
   return (
     <FormProvider {...methods}>
@@ -152,7 +155,7 @@ export default function WeeklyTimesheetPage() {
         )}
 
         {/* Stats */}
-        <div className="mb-4 flex gap-6 text-sm text-text-secondary">
+        <div className="mb-4 flex flex-wrap gap-6 text-sm text-text-secondary">
           <span>
             Present:{" "}
             <strong className="text-text-primary">{presentCount} days</strong>
@@ -161,6 +164,17 @@ export default function WeeklyTimesheetPage() {
             Total Hours:{" "}
             <strong className="text-text-primary">{totalHours}h</strong>
           </span>
+          {totalOvertime > 0 && (
+            <span>
+              Overtime:{" "}
+              <strong className="text-warning">
+                {totalOvertime.toFixed(1)}h
+              </strong>
+              <span className="ml-1 text-xs text-text-disabled">
+                (&gt;{threshold}h/day)
+              </span>
+            </span>
+          )}
         </div>
 
         {/* Day rows */}
@@ -176,7 +190,16 @@ export default function WeeklyTimesheetPage() {
             ))}
           </div>
           {entries.map((entry, i) => (
-            <DayRow key={entry.date} index={i} readOnly={readOnly} />
+            <div
+              key={entry.date}
+              className={
+                (entry.overtime_hours ?? 0) > 0
+                  ? "bg-warning-subtle"
+                  : undefined
+              }
+            >
+              <DayRow index={i} readOnly={readOnly} />
+            </div>
           ))}
         </Card>
 
@@ -195,6 +218,18 @@ export default function WeeklyTimesheetPage() {
             </span>
           </div>
         )}
+
+        {/* PDF download */}
+        <div className="mb-4">
+          <a
+            href={getTimesheetPdfUrl(sheet.id)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface hover:text-text-primary"
+          >
+            Download PDF
+          </a>
+        </div>
 
         {/* Draft actions */}
         {!readOnly && (

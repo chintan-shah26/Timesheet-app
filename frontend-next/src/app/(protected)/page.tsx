@@ -11,9 +11,21 @@ import {
 } from "@tanstack/react-table";
 import { format, parseISO, addDays, startOfWeek } from "date-fns";
 import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
+import {
   getTimesheets,
   createTimesheet,
   getLeaveBalance,
+  getWeeklySummary,
 } from "@/api/timesheets";
 import { getGreeting, getFirstName } from "@/lib/greeting";
 import { useAuth } from "@/context/auth-context";
@@ -27,11 +39,16 @@ function weekLabel(weekStart: string) {
   return `${format(mon, "MMM d")} – ${format(addDays(mon, 6), "MMM d, yyyy")}`;
 }
 
+function shortWeek(weekStart: string) {
+  return format(parseISO(weekStart), "MMM d");
+}
+
 const CURRENT_YEAR = new Date().getFullYear();
 
 const QUERY_KEYS = {
   timesheets: ["timesheets"] as const,
   leaveBalance: (year: number) => ["leave-balance", year] as const,
+  weeklySummary: ["worker-weekly-summary"] as const,
 };
 
 const columns: ColumnDef<TimesheetSummary>[] = [
@@ -88,6 +105,12 @@ export default function DashboardPage() {
     enabled: user?.role === "worker",
   });
 
+  const { data: weeklySummary = [] } = useQuery({
+    queryKey: QUERY_KEYS.weeklySummary,
+    queryFn: () => getWeeklySummary(8),
+    enabled: user?.role === "worker",
+  });
+
   const createMutation = useMutation({
     mutationFn: createTimesheet,
     onSuccess: (sheet) => {
@@ -95,7 +118,6 @@ export default function DashboardPage() {
       router.push(`/timesheets/${sheet.id}`);
     },
     onError: (err: unknown) => {
-      // 409 = week already exists, navigate to it
       const status = (err as { response?: { status?: number } })?.response
         ?.status;
       if (status === 409) {
@@ -116,6 +138,13 @@ export default function DashboardPage() {
   });
 
   if (user?.role === "admin") return null;
+
+  const chartData = weeklySummary.map((w) => ({
+    week: shortWeek(w.week_start),
+    hours: Number(w.total_hours),
+    presence:
+      w.present_days > 0 ? Math.round((Number(w.present_days) / 5) * 100) : 0,
+  }));
 
   return (
     <div>
@@ -165,6 +194,67 @@ export default function DashboardPage() {
                   Days counted from submitted &amp; approved timesheets
                 </p>
               </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Charts */}
+      {chartData.length > 0 && (
+        <div className="mb-6 grid grid-cols-2 gap-4">
+          <Card>
+            <div className="px-4 pt-4 pb-2">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Weekly Hours
+              </p>
+              <ResponsiveContainer width="100%" height={140}>
+                <BarChart data={chartData} barSize={18}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                  />
+                  <XAxis dataKey="week" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} width={28} />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12 }}
+                    formatter={(v) => [`${Number(v)}h`, "Hours"]}
+                  />
+                  <Bar
+                    dataKey="hours"
+                    fill="var(--color-accent)"
+                    radius={[3, 3, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="px-4 pt-4 pb-2">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                Presence Rate (%)
+              </p>
+              <ResponsiveContainer width="100%" height={140}>
+                <LineChart data={chartData}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                  />
+                  <XAxis dataKey="week" tick={{ fontSize: 10 }} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={28} />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12 }}
+                    formatter={(v) => [`${Number(v)}%`, "Presence"]}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="presence"
+                    stroke="var(--color-accent)"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </Card>
         </div>

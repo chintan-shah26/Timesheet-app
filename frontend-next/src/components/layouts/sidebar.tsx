@@ -10,6 +10,7 @@ import {
   UsersRound,
   CalendarDays,
   Umbrella,
+  Settings,
   LogOut,
   type LucideProps,
 } from "lucide-react";
@@ -36,6 +37,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/holidays", label: "Holidays", icon: CalendarDays },
   { href: "/admin/leave", label: "Leave", icon: Umbrella },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 const teamLeadNav: NavItem[] = [

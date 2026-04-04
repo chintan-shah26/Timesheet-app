@@ -70,6 +70,19 @@ async function initSchema() {
       joined_at TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(user_id)
     );
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key        TEXT PRIMARY KEY,
+      value      TEXT NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+
+  // Seed default settings (idempotent)
+  await pool.query(`
+    INSERT INTO app_settings (key, value)
+    VALUES ('overtime_threshold_hours', '8')
+    ON CONFLICT (key) DO NOTHING
   `);
 }
 

@@ -2,6 +2,7 @@ const express = require("express");
 const ExcelJS = require("exceljs");
 const { pool } = require("../db");
 const { hashPassword } = require("../auth");
+const { streamTimesheetPdf } = require("../lib/pdf");
 const router = express.Router();
 
 function requireAdmin(req, res, next) {
@@ -446,13 +447,22 @@ router.get("/reports/monthly", requireAdmin, async (req, res) => {
     teamFilter = `AND u.id IN (SELECT user_id FROM team_members WHERE team_id = $${params.length})`;
   }
 
+  const thresholdResult = await pool.query(
+    "SELECT value FROM app_settings WHERE key = 'overtime_threshold_hours'",
+  );
+  const threshold = Math.min(
+    24,
+    Math.max(0, parseFloat(thresholdResult.rows[0]?.value ?? "8") || 8),
+  );
+
   const result = await pool.query(
     `
     SELECT
       u.id AS user_id, u.name, u.email,
       COUNT(DISTINCT t.id) AS timesheet_count,
       COALESCE(SUM(CASE WHEN e.is_present = TRUE THEN 1 ELSE 0 END), 0) AS total_present_days,
-      COALESCE(SUM(CASE WHEN e.is_present = TRUE THEN e.hours ELSE 0 END), 0) AS total_hours
+      COALESCE(SUM(CASE WHEN e.is_present = TRUE THEN e.hours ELSE 0 END), 0) AS total_hours,
+      COALESCE(SUM(CASE WHEN e.is_present = TRUE AND e.hours > $2 THEN e.hours - $2 ELSE 0 END), 0) AS overtime_hours
     FROM users u
     LEFT JOIN timesheets t ON t.user_id = u.id
       AND t.status = 'approved'
@@ -462,7 +472,7 @@ router.get("/reports/monthly", requireAdmin, async (req, res) => {
     GROUP BY u.id
     ORDER BY u.name
   `,
-    params,
+    [...params, threshold],
   );
 
   res.json({ month, workers: result.rows });
@@ -697,5 +707,110 @@ router.patch("/users/:id/password", requireAdmin, async (req, res) => {
     return res.status(404).json({ error: "User not found" });
   res.json({ ok: true });
 });
+
+// App settings
+router.get("/settings", requireAdmin, async (req, res) => {
+  const result = await pool.query(
+    "SELECT key, value FROM app_settings ORDER BY key",
+  );
+  const settings = Object.fromEntries(result.rows.map((r) => [r.key, r.value]));
+  res.json(settings);
+});
+
+router.patch("/settings", requireAdmin, async (req, res) => {
+  const ALLOWED_KEYS = ["overtime_threshold_hours"];
+  const { key, value } = req.body;
+  if (!ALLOWED_KEYS.includes(key))
+    return res.status(400).json({ error: `Unknown setting key: ${key}` });
+  if (key === "overtime_threshold_hours") {
+    const num = Number(value);
+    if (isNaN(num) || num < 0 || num > 24)
+      return res
+        .status(400)
+        .json({ error: "overtime_threshold_hours must be between 0 and 24" });
+  }
+  await pool.query(
+    `INSERT INTO app_settings (key, value, updated_at) VALUES ($1, $2, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [key, String(value)],
+  );
+  res.json({ ok: true });
+});
+
+// Weekly summary (admin) — last N weeks of aggregate hours + presence rate
+router.get("/reports/weekly-summary", requireAdminOrLead, async (req, res) => {
+  const weeks = Math.max(1, Math.min(Number(req.query.weeks) || 8, 52));
+  const { team_id } = req.query;
+
+  const params = [weeks];
+  let teamFilter = "";
+
+  const leadTeamId = await getLeadTeamId(req.user);
+  if (req.user.role === "team_lead" && leadTeamId === null) return res.json([]);
+
+  const effectiveTeamId = leadTeamId ?? (team_id ? Number(team_id) : null);
+  if (effectiveTeamId) {
+    params.push(effectiveTeamId);
+    teamFilter = `AND t.user_id IN (SELECT user_id FROM team_members WHERE team_id = $${params.length})`;
+  }
+
+  const result = await pool.query(
+    `
+    SELECT
+      t.week_start::TEXT,
+      COALESCE(SUM(CASE WHEN e.is_present = TRUE THEN e.hours ELSE 0 END), 0) AS total_hours,
+      COUNT(CASE WHEN e.is_present = TRUE THEN 1 END) AS present_days,
+      COUNT(DISTINCT t.user_id) AS worker_count
+    FROM timesheets t
+    LEFT JOIN timesheet_entries e ON e.timesheet_id = t.id
+    WHERE t.week_start >= (CURRENT_DATE - ($1 * INTERVAL '1 week'))::DATE
+      AND t.status IN ('submitted', 'approved')
+      ${teamFilter}
+    GROUP BY t.week_start
+    ORDER BY t.week_start
+    `,
+    params,
+  );
+
+  res.json(result.rows);
+});
+
+// PDF export for a single timesheet (admin)
+router.get(
+  "/timesheets/:id/export/pdf",
+  requireAdminOrLead,
+  async (req, res) => {
+    const sheetResult = await pool.query(
+      `SELECT t.*, u.name AS worker_name FROM timesheets t JOIN users u ON u.id = t.user_id WHERE t.id = $1`,
+      [req.params.id],
+    );
+    const sheet = sheetResult.rows[0];
+    if (!sheet) return res.status(404).json({ error: "Not found" });
+
+    const leadTeamId = await getLeadTeamId(req.user);
+    if (leadTeamId) {
+      const check = await pool.query(
+        "SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2",
+        [leadTeamId, sheet.user_id],
+      );
+      if (!check.rows[0])
+        return res.status(403).json({ error: "Access denied" });
+    }
+
+    const entries = await pool.query(
+      "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
+      [sheet.id],
+    );
+    const thresholdResult = await pool.query(
+      "SELECT value FROM app_settings WHERE key = 'overtime_threshold_hours'",
+    );
+    const threshold = Math.min(
+      24,
+      Math.max(0, parseFloat(thresholdResult.rows[0]?.value ?? "8") || 8),
+    );
+
+    streamTimesheetPdf(res, sheet, entries.rows, threshold);
+  },
+);
 
 module.exports = router;

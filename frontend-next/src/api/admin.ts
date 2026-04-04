@@ -11,6 +11,8 @@ import type {
   Team,
   TeamDetail,
   BulkApproveResult,
+  WeeklySummary,
+  AppSettings,
 } from "@/types";
 
 // Timesheets
@@ -198,4 +200,28 @@ export async function getEmployeeMonthlyReport(
     { params: { month, user_id: userId } },
   );
   return r.data;
+}
+
+export async function getAdminWeeklySummary(
+  weeks = 8,
+  teamId?: string,
+): Promise<WeeklySummary[]> {
+  const r = await apiClient.get<WeeklySummary[]>(
+    "/api/admin/reports/weekly-summary",
+    { params: { weeks, ...(teamId ? { team_id: teamId } : {}) } },
+  );
+  return r.data;
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  const r = await apiClient.get<AppSettings>("/api/admin/settings");
+  return r.data;
+}
+
+export async function updateSetting(key: string, value: string): Promise<void> {
+  await apiClient.patch("/api/admin/settings", { key, value });
+}
+
+export function getAdminTimesheetPdfUrl(id: number): string {
+  return `${apiClient.defaults.baseURL}/api/admin/timesheets/${id}/export/pdf`;
 }

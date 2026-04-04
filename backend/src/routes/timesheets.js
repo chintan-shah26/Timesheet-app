@@ -1,6 +1,7 @@
 const express = require("express");
 const { pool } = require("../db");
 const router = express.Router();
+const { streamTimesheetPdf } = require("../lib/pdf");
 
 function requireAuth(req, res, next) {
   if (!req.user) return res.status(401).json({ error: "Not authenticated" });
@@ -34,6 +35,29 @@ router.get("/", requireAuth, async (req, res) => {
     ORDER BY t.week_start DESC
   `,
     [req.user.id],
+  );
+  res.json(result.rows);
+});
+
+// Weekly summary for the authenticated worker (last N weeks)
+// MUST be registered before GET /:id to avoid route shadowing
+router.get("/weekly-summary", requireAuth, async (req, res) => {
+  const weeks = Math.max(1, Math.min(Number(req.query.weeks) || 8, 52));
+  const result = await pool.query(
+    `
+    SELECT
+      t.week_start::TEXT,
+      COALESCE(SUM(CASE WHEN e.is_present = TRUE THEN e.hours ELSE 0 END), 0) AS total_hours,
+      COUNT(CASE WHEN e.is_present = TRUE THEN 1 END) AS present_days
+    FROM timesheets t
+    LEFT JOIN timesheet_entries e ON e.timesheet_id = t.id
+    WHERE t.user_id = $1
+      AND t.week_start >= (CURRENT_DATE - ($2 * INTERVAL '1 week'))::DATE
+      AND t.status IN ('submitted', 'approved')
+    GROUP BY t.week_start
+    ORDER BY t.week_start
+    `,
+    [req.user.id, weeks],
   );
   res.json(result.rows);
 });
@@ -74,27 +98,76 @@ router.get("/leave-balance", requireAuth, async (req, res) => {
   });
 });
 
-// Get single timesheet with entries
-router.get("/:id", requireAuth, async (req, res) => {
+// PDF export for a single timesheet (worker)
+// MUST be registered before GET /:id to avoid route shadowing
+router.get("/:id/export/pdf", requireAuth, async (req, res) => {
   const sheet = await fetchSheet(req.params.id, req.user.id);
   if (!sheet) return res.status(404).json({ error: "Not found" });
+
+  // Attach worker name for the PDF header
+  const userResult = await pool.query("SELECT name FROM users WHERE id = $1", [
+    req.user.id,
+  ]);
+  sheet.worker_name = userResult.rows[0]?.name ?? "";
 
   const entries = await pool.query(
     "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
     [sheet.id],
   );
-  res.json({ ...sheet, entries: entries.rows });
+  const thresholdResult = await pool.query(
+    "SELECT value FROM app_settings WHERE key = 'overtime_threshold_hours'",
+  );
+  const threshold = Math.min(
+    24,
+    Math.max(0, parseFloat(thresholdResult.rows[0]?.value ?? "8") || 8),
+  );
+
+  streamTimesheetPdf(res, sheet, entries.rows, threshold);
+});
+
+// Get single timesheet with entries (includes overtime per entry)
+router.get("/:id", requireAuth, async (req, res) => {
+  const sheet = await fetchSheet(req.params.id, req.user.id);
+  if (!sheet) return res.status(404).json({ error: "Not found" });
+
+  const thresholdResult = await pool.query(
+    "SELECT value FROM app_settings WHERE key = 'overtime_threshold_hours'",
+  );
+  const threshold = Math.min(
+    24,
+    Math.max(0, parseFloat(thresholdResult.rows[0]?.value ?? "8") || 8),
+  );
+
+  const entries = await pool.query(
+    "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
+    [sheet.id],
+  );
+
+  const enrichedEntries = entries.rows.map((e) => {
+    const hours = e.is_present && e.hours ? parseFloat(e.hours) : 0;
+    return { ...e, overtime_hours: Math.max(0, hours - threshold) };
+  });
+
+  const total_overtime_hours = enrichedEntries.reduce(
+    (s, e) => s + e.overtime_hours,
+    0,
+  );
+
+  res.json({
+    ...sheet,
+    overtime_threshold: threshold,
+    total_overtime_hours,
+    entries: enrichedEntries,
+  });
 });
 
 // Create new timesheet for a week (pre-fills holiday entries)
 router.post("/", requireAuth, async (req, res) => {
   const { week_start } = req.body;
   if (!week_start || !/^\d{4}-\d{2}-\d{2}$/.test(week_start))
-    return res
-      .status(400)
-      .json({
-        error: "week_start is required and must be in YYYY-MM-DD format",
-      });
+    return res.status(400).json({
+      error: "week_start is required and must be in YYYY-MM-DD format",
+    });
 
   const client = await pool.connect();
   try {
