@@ -164,10 +164,11 @@ export default function TeamsPage() {
     onError: () => alert("Failed to update lead status."),
   });
 
-  // Workers not already in any team (for the add member dropdown)
+  // Workers not already in any team — role 'worker' means unassigned;
+  // team members have role 'team_lead' or remain 'worker'. Exclude current team members by id.
   const memberIds = new Set(selectedTeam?.members.map((m) => m.id) ?? []);
   const availableWorkers = allUsers.filter(
-    (u) => u.role !== "admin" && !memberIds.has(u.id),
+    (u) => u.role === "worker" && !memberIds.has(u.id),
   );
 
   function openCreate() {

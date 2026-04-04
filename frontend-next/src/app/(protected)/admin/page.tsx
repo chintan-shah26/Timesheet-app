@@ -163,7 +163,7 @@ export default function AdminDashboardPage() {
   });
 
   return (
-    <AuthGate adminOnly>
+    <AuthGate adminOnly allowTeamLead>
       <div>
         {greeting && (
           <div className="mb-6">

@@ -12,7 +12,7 @@ async function initSchema() {
       email         TEXT UNIQUE NOT NULL,
       name          TEXT NOT NULL,
       password_hash TEXT NOT NULL,
-      role          TEXT NOT NULL DEFAULT 'worker',
+      role          TEXT NOT NULL DEFAULT 'worker' CHECK (role IN ('worker', 'team_lead', 'admin')),
       created_at    TIMESTAMPTZ DEFAULT NOW()
     );
 

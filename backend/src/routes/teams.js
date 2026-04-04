@@ -16,8 +16,40 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// List all teams with member counts
+function parseIntParam(val, name) {
+  const n = Number(val);
+  if (!Number.isInteger(n) || n <= 0)
+    throw Object.assign(new Error(`Invalid ${name}`), { status: 400 });
+  return n;
+}
+
+// Resolve team_id for the calling team_lead (null if admin or no assignment)
+async function getCallerTeamId(user) {
+  if (user.role !== "team_lead") return null;
+  const result = await pool.query(
+    "SELECT team_id FROM team_members WHERE user_id = $1",
+    [user.id],
+  );
+  return result.rows[0]?.team_id ?? null;
+}
+
+// List teams — admin sees all; team_lead sees only their own team
 router.get("/", requireAdminOrLead, async (req, res) => {
+  if (req.user.role === "team_lead") {
+    const callerTeamId = await getCallerTeamId(req.user);
+    if (!callerTeamId) return res.json([]);
+    const result = await pool.query(
+      `SELECT t.id, t.name, t.description, t.created_at,
+         COUNT(tm.user_id) AS member_count
+       FROM teams t
+       LEFT JOIN team_members tm ON tm.team_id = t.id
+       WHERE t.id = $1
+       GROUP BY t.id`,
+      [callerTeamId],
+    );
+    return res.json(result.rows);
+  }
+
   const result = await pool.query(`
     SELECT t.id, t.name, t.description, t.created_at,
       COUNT(tm.user_id) AS member_count
@@ -29,10 +61,23 @@ router.get("/", requireAdminOrLead, async (req, res) => {
   res.json(result.rows);
 });
 
-// Get single team with members
+// Get single team with members — team_lead can only view their own team
 router.get("/:id", requireAdminOrLead, async (req, res) => {
+  let teamId;
+  try {
+    teamId = parseIntParam(req.params.id, "team id");
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
+  if (req.user.role === "team_lead") {
+    const callerTeamId = await getCallerTeamId(req.user);
+    if (callerTeamId !== teamId)
+      return res.status(403).json({ error: "Access denied" });
+  }
+
   const teamResult = await pool.query("SELECT * FROM teams WHERE id = $1", [
-    req.params.id,
+    teamId,
   ]);
   const team = teamResult.rows[0];
   if (!team) return res.status(404).json({ error: "Team not found" });
@@ -63,13 +108,20 @@ router.post("/", requireAdmin, async (req, res) => {
 
 // Update team
 router.put("/:id", requireAdmin, async (req, res) => {
+  let teamId;
+  try {
+    teamId = parseIntParam(req.params.id, "team id");
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
   const { name, description } = req.body;
   if (!name || !name.trim())
     return res.status(400).json({ error: "Team name is required" });
 
   const result = await pool.query(
     "UPDATE teams SET name = $1, description = $2 WHERE id = $3 RETURNING *",
-    [name.trim(), description?.trim() ?? null, req.params.id],
+    [name.trim(), description?.trim() ?? null, teamId],
   );
   if (result.rowCount === 0)
     return res.status(404).json({ error: "Team not found" });
@@ -78,18 +130,23 @@ router.put("/:id", requireAdmin, async (req, res) => {
 
 // Delete team — blocked if members exist
 router.delete("/:id", requireAdmin, async (req, res) => {
+  let teamId;
+  try {
+    teamId = parseIntParam(req.params.id, "team id");
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
   const memberCount = await pool.query(
     "SELECT COUNT(*) AS cnt FROM team_members WHERE team_id = $1",
-    [req.params.id],
+    [teamId],
   );
   if (parseInt(memberCount.rows[0].cnt) > 0)
     return res
       .status(409)
       .json({ error: "Remove all members before deleting" });
 
-  const result = await pool.query("DELETE FROM teams WHERE id = $1", [
-    req.params.id,
-  ]);
+  const result = await pool.query("DELETE FROM teams WHERE id = $1", [teamId]);
   if (result.rowCount === 0)
     return res.status(404).json({ error: "Team not found" });
   res.json({ ok: true });
@@ -97,9 +154,20 @@ router.delete("/:id", requireAdmin, async (req, res) => {
 
 // Add member to team (optionally as lead)
 router.post("/:id/members", requireAdmin, async (req, res) => {
-  const teamId = Number(req.params.id);
-  const { user_id, is_lead = false } = req.body;
-  if (!user_id) return res.status(400).json({ error: "user_id is required" });
+  let teamId;
+  try {
+    teamId = parseIntParam(req.params.id, "team id");
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
+  const userId = Number(req.body.user_id);
+  if (!Number.isInteger(userId) || userId <= 0)
+    return res
+      .status(400)
+      .json({ error: "user_id must be a positive integer" });
+
+  const { is_lead = false } = req.body;
 
   // Verify team exists
   const teamResult = await pool.query("SELECT id FROM teams WHERE id = $1", [
@@ -108,10 +176,10 @@ router.post("/:id/members", requireAdmin, async (req, res) => {
   if (!teamResult.rows[0])
     return res.status(404).json({ error: "Team not found" });
 
-  // Verify user exists and is a worker or team_lead
+  // Verify user exists and is not an admin
   const userResult = await pool.query(
     "SELECT id, role FROM users WHERE id = $1",
-    [user_id],
+    [userId],
   );
   const user = userResult.rows[0];
   if (!user) return res.status(404).json({ error: "User not found" });
@@ -125,13 +193,13 @@ router.post("/:id/members", requireAdmin, async (req, res) => {
     // Insert membership — UNIQUE(user_id) will throw 23505 if already in a team
     await client.query(
       "INSERT INTO team_members (team_id, user_id, is_lead) VALUES ($1, $2, $3)",
-      [teamId, user_id, is_lead],
+      [teamId, userId, is_lead],
     );
 
     // Promote role if is_lead
     if (is_lead) {
       await client.query("UPDATE users SET role = 'team_lead' WHERE id = $1", [
-        user_id,
+        userId,
       ]);
     }
 
@@ -151,8 +219,13 @@ router.post("/:id/members", requireAdmin, async (req, res) => {
 
 // Remove member from team
 router.delete("/:id/members/:userId", requireAdmin, async (req, res) => {
-  const teamId = Number(req.params.id);
-  const userId = Number(req.params.userId);
+  let teamId, userId;
+  try {
+    teamId = parseIntParam(req.params.id, "team id");
+    userId = parseIntParam(req.params.userId, "user id");
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
 
   const client = await pool.connect();
   try {
@@ -187,8 +260,14 @@ router.delete("/:id/members/:userId", requireAdmin, async (req, res) => {
 
 // Update lead status of a member
 router.patch("/:id/members/:userId", requireAdmin, async (req, res) => {
-  const teamId = Number(req.params.id);
-  const userId = Number(req.params.userId);
+  let teamId, userId;
+  try {
+    teamId = parseIntParam(req.params.id, "team id");
+    userId = parseIntParam(req.params.userId, "user id");
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+
   const { is_lead } = req.body;
   if (typeof is_lead !== "boolean")
     return res.status(400).json({ error: "is_lead (boolean) is required" });

@@ -7,18 +7,29 @@ import { useAuth } from "@/context/auth-context";
 interface AuthGateProps {
   children: ReactNode;
   adminOnly?: boolean;
+  /** Allow team_lead role in addition to admin for adminOnly routes */
+  allowTeamLead?: boolean;
 }
 
 /**
  * Client-side route guard. Redirects unauthenticated users to /login.
  * Redirects non-admins away from adminOnly routes.
+ * Pass allowTeamLead to also permit the team_lead role on a specific route.
  */
 export default function AuthGate({
   children,
   adminOnly = false,
+  allowTeamLead = false,
 }: AuthGateProps) {
   const { user, loading, needsSetup } = useAuth();
   const router = useRouter();
+
+  const isAllowed = (role: string) => {
+    if (!adminOnly) return true;
+    if (role === "admin") return true;
+    if (allowTeamLead && role === "team_lead") return true;
+    return false;
+  };
 
   useEffect(() => {
     if (loading) return;
@@ -26,10 +37,12 @@ export default function AuthGate({
       router.replace(needsSetup ? "/setup" : "/login");
       return;
     }
-    if (adminOnly && user.role !== "admin" && user.role !== "team_lead") {
-      router.replace("/");
-    }
-  }, [user, loading, needsSetup, adminOnly, router]);
+    const allowed =
+      !adminOnly ||
+      user.role === "admin" ||
+      (allowTeamLead && user.role === "team_lead");
+    if (!allowed) router.replace("/");
+  }, [user, loading, needsSetup, adminOnly, allowTeamLead, router]);
 
   if (loading) {
     return (
@@ -40,8 +53,7 @@ export default function AuthGate({
   }
 
   if (!user) return null;
-  if (adminOnly && user.role !== "admin" && user.role !== "team_lead")
-    return null;
+  if (!isAllowed(user.role)) return null;
 
   return <>{children}</>;
 }

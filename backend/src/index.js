@@ -93,8 +93,8 @@ app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/setup", authLimiter);
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/timesheets", require("./routes/timesheets"));
-app.use("/api/admin", require("./routes/admin"));
 app.use("/api/admin/teams", require("./routes/teams"));
+app.use("/api/admin", require("./routes/admin"));
 
 // Health check
 app.get("/api/health", (req, res) => res.json({ ok: true }));

@@ -51,6 +51,10 @@ router.get("/timesheets", requireAdminOrLead, async (req, res) => {
 
   // team_lead: implicit team scope; admin: optional explicit team_id filter
   const leadTeamId = await getLeadTeamId(req.user);
+  // Guard: team_lead with no team assignment sees nothing (not all timesheets)
+  if (req.user.role === "team_lead" && leadTeamId === null) {
+    return res.json([]);
+  }
   const effectiveTeamId = leadTeamId ?? (team_id ? Number(team_id) : null);
   if (effectiveTeamId) {
     params.push(effectiveTeamId);
@@ -113,6 +117,22 @@ router.post("/timesheets/:id/approve", requireAdminOrLead, async (req, res) => {
   );
   const sheet = sheetResult.rows[0];
   if (!sheet) return res.status(404).json({ error: "Not found" });
+
+  // team_lead: verify the timesheet belongs to their team
+  const leadTeamId = await getLeadTeamId(req.user);
+  if (req.user.role === "team_lead") {
+    if (!leadTeamId)
+      return res
+        .status(403)
+        .json({ error: "Team lead is not assigned to a team" });
+    const memberCheck = await pool.query(
+      "SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2",
+      [leadTeamId, sheet.user_id],
+    );
+    if (!memberCheck.rows[0])
+      return res.status(403).json({ error: "Access denied" });
+  }
+
   if (sheet.status !== "submitted")
     return res
       .status(400)
@@ -133,6 +153,22 @@ router.post("/timesheets/:id/reject", requireAdminOrLead, async (req, res) => {
   );
   const sheet = sheetResult.rows[0];
   if (!sheet) return res.status(404).json({ error: "Not found" });
+
+  // team_lead: verify the timesheet belongs to their team
+  const leadTeamId = await getLeadTeamId(req.user);
+  if (req.user.role === "team_lead") {
+    if (!leadTeamId)
+      return res
+        .status(403)
+        .json({ error: "Team lead is not assigned to a team" });
+    const memberCheck = await pool.query(
+      "SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2",
+      [leadTeamId, sheet.user_id],
+    );
+    if (!memberCheck.rows[0])
+      return res.status(403).json({ error: "Access denied" });
+  }
+
   if (sheet.status !== "submitted")
     return res
       .status(400)
@@ -321,9 +357,14 @@ router.get("/reports/monthly", requireAdmin, async (req, res) => {
     return res.status(400).json({ error: "month must be in YYYY-MM format" });
 
   const params = [month];
-  const teamFilter = team_id
-    ? `AND u.id IN (SELECT user_id FROM team_members WHERE team_id = $${params.push(Number(team_id)) && params.length})`
-    : "";
+  let teamFilter = "";
+  if (team_id) {
+    const tid = Number(team_id);
+    if (!Number.isInteger(tid) || tid <= 0)
+      return res.status(400).json({ error: "Invalid team_id" });
+    params.push(tid);
+    teamFilter = `AND u.id IN (SELECT user_id FROM team_members WHERE team_id = $${params.length})`;
+  }
 
   const result = await pool.query(
     `
