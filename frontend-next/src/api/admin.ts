@@ -6,6 +6,8 @@ import type {
   Role,
   MonthlyReport,
   EmployeeMonthlyReport,
+  PublicHoliday,
+  AdminLeaveBalance,
   Team,
   TeamDetail,
 } from "@/types";
@@ -135,6 +137,45 @@ export async function getMonthlyReport(
     params: { month, ...(teamId ? { team_id: teamId } : {}) },
   });
   return r.data;
+}
+
+// Holidays
+export async function getHolidays(year?: number): Promise<PublicHoliday[]> {
+  const r = await apiClient.get<PublicHoliday[]>("/api/admin/holidays", {
+    params: year ? { year } : {},
+  });
+  return r.data;
+}
+
+export async function createHoliday(data: {
+  date: string;
+  name: string;
+}): Promise<PublicHoliday> {
+  const r = await apiClient.post<PublicHoliday>("/api/admin/holidays", data);
+  return r.data;
+}
+
+export async function deleteHoliday(id: number): Promise<void> {
+  await apiClient.delete(`/api/admin/holidays/${id}`);
+}
+
+// Leave balances
+export async function getLeaveBalances(
+  year: number,
+): Promise<AdminLeaveBalance[]> {
+  const r = await apiClient.get<AdminLeaveBalance[]>(
+    "/api/admin/leave-balances",
+    { params: { year } },
+  );
+  return r.data;
+}
+
+export async function setLeaveBalance(data: {
+  user_id: number;
+  year: number;
+  allocated_days: number;
+}): Promise<void> {
+  await apiClient.post("/api/admin/leave-balances", data);
 }
 
 export async function getEmployeeMonthlyReport(

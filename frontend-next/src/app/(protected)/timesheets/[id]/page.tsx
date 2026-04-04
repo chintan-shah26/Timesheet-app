@@ -10,6 +10,7 @@ import {
   saveEntries,
   submitTimesheet,
   recallTimesheet,
+  copyLastWeek,
 } from "@/api/timesheets";
 import Badge from "@/components/common/badge";
 import Button from "@/components/common/button";
@@ -99,6 +100,19 @@ export default function WeeklyTimesheetPage() {
     onError: () => alert("Failed to recall timesheet. Please try again."),
   });
 
+  const copyMutation = useMutation({
+    mutationFn: () => copyLastWeek(Number(id)),
+    onSuccess: (data) => {
+      reset({ entries: data.entries });
+    },
+    onError: (err: unknown) => {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? "Failed to copy last week.";
+      alert(msg);
+    },
+  });
+
   if (isLoading || !sheet) {
     return (
       <div className="flex h-40 items-center justify-center text-sm text-text-secondary">
@@ -184,7 +198,7 @@ export default function WeeklyTimesheetPage() {
 
         {/* Draft actions */}
         {!readOnly && (
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <Button
               variant="secondary"
               onClick={() => saveMutation.mutate()}
@@ -195,6 +209,14 @@ export default function WeeklyTimesheetPage() {
                 : saveMutation.isPending
                   ? "Saving…"
                   : "Save Draft"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => copyMutation.mutate()}
+              disabled={copyMutation.isPending}
+              title="Fill this week's entries from last week"
+            >
+              {copyMutation.isPending ? "Copying…" : "Copy Last Week"}
             </Button>
             <Button
               onClick={() => setShowSubmitModal(true)}

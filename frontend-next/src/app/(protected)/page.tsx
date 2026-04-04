@@ -10,7 +10,11 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import { format, parseISO, addDays, startOfWeek } from "date-fns";
-import { getTimesheets, createTimesheet } from "@/api/timesheets";
+import {
+  getTimesheets,
+  createTimesheet,
+  getLeaveBalance,
+} from "@/api/timesheets";
 import { getGreeting, getFirstName } from "@/lib/greeting";
 import { useAuth } from "@/context/auth-context";
 import Badge from "@/components/common/badge";
@@ -23,8 +27,11 @@ function weekLabel(weekStart: string) {
   return `${format(mon, "MMM d")} – ${format(addDays(mon, 6), "MMM d, yyyy")}`;
 }
 
+const CURRENT_YEAR = new Date().getFullYear();
+
 const QUERY_KEYS = {
   timesheets: ["timesheets"] as const,
+  leaveBalance: (year: number) => ["leave-balance", year] as const,
 };
 
 const columns: ColumnDef<TimesheetSummary>[] = [
@@ -75,6 +82,12 @@ export default function DashboardPage() {
     enabled: user?.role === "worker",
   });
 
+  const { data: leaveBalance } = useQuery({
+    queryKey: QUERY_KEYS.leaveBalance(CURRENT_YEAR),
+    queryFn: () => getLeaveBalance(CURRENT_YEAR),
+    enabled: user?.role === "worker",
+  });
+
   const createMutation = useMutation({
     mutationFn: createTimesheet,
     onSuccess: (sheet) => {
@@ -114,6 +127,46 @@ export default function DashboardPage() {
           <p className="mt-0.5 text-sm text-text-secondary">
             Here&apos;s your timesheet overview
           </p>
+        </div>
+      )}
+
+      {/* Leave balance widget */}
+      {leaveBalance && (
+        <div className="mb-6">
+          <Card>
+            <div className="flex items-center gap-6 px-5 py-4">
+              <div className="text-center">
+                <p className="text-2xl font-semibold text-text-primary">
+                  {leaveBalance.allocated_days}
+                </p>
+                <p className="text-xs text-text-secondary">Allocated</p>
+              </div>
+              <div className="h-8 w-px bg-border" />
+              <div className="text-center">
+                <p className="text-2xl font-semibold text-text-primary">
+                  {leaveBalance.used_days}
+                </p>
+                <p className="text-xs text-text-secondary">Used</p>
+              </div>
+              <div className="h-8 w-px bg-border" />
+              <div className="text-center">
+                <p
+                  className={`text-2xl font-semibold ${leaveBalance.remaining_days <= 0 ? "text-danger" : "text-accent"}`}
+                >
+                  {leaveBalance.remaining_days}
+                </p>
+                <p className="text-xs text-text-secondary">Remaining</p>
+              </div>
+              <div className="ml-2">
+                <p className="text-sm font-medium text-text-primary">
+                  Leave Balance {CURRENT_YEAR}
+                </p>
+                <p className="text-xs text-text-secondary">
+                  Days counted from submitted &amp; approved timesheets
+                </p>
+              </div>
+            </div>
+          </Card>
         </div>
       )}
 

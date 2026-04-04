@@ -8,6 +8,8 @@ import {
   BarChart2,
   Users,
   UsersRound,
+  CalendarDays,
+  Umbrella,
   LogOut,
   type LucideProps,
 } from "lucide-react";
@@ -32,6 +34,8 @@ const adminNav: NavItem[] = [
   { href: "/admin/reports", label: "Reports", icon: BarChart2 },
   { href: "/admin/teams", label: "Teams", icon: UsersRound },
   { href: "/admin/users", label: "Users", icon: Users },
+  { href: "/admin/holidays", label: "Holidays", icon: CalendarDays },
+  { href: "/admin/leave", label: "Leave", icon: Umbrella },
 ];
 
 const teamLeadNav: NavItem[] = [

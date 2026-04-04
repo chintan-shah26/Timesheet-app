@@ -81,6 +81,28 @@ export interface MonthlyReport {
   workers: WorkerMonthSummary[];
 }
 
+export interface PublicHoliday {
+  id: number;
+  date: string; // yyyy-MM-dd
+  name: string;
+  created_at: string;
+}
+
+export interface LeaveBalance {
+  year: number;
+  allocated_days: number;
+  used_days: number;
+  remaining_days: number;
+}
+
+export interface AdminLeaveBalance {
+  user_id: number;
+  name: string;
+  email: string;
+  allocated_days: number;
+  used_days: number;
+}
+
 // Monthly report — single employee
 export interface EmployeeReportSummary {
   total_present_days: number;
