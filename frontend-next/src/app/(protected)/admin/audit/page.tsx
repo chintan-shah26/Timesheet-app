@@ -83,7 +83,7 @@ const QUERY_KEYS = {
     to: string,
     page: number,
   ) => ["admin-audit", action, actorId, from, to, page] as const,
-  workers: ["admin-workers"] as const,
+  workers: ["admin-users"] as const,
 };
 
 const columns: ColumnDef<AuditLog>[] = [
@@ -150,6 +150,7 @@ export default function AuditLogPage() {
   const { data: workers = [] } = useQuery({
     queryKey: QUERY_KEYS.workers,
     queryFn: getUsers,
+    staleTime: 5 * 60 * 1000,
   });
 
   const table = useReactTable({
@@ -158,7 +159,9 @@ export default function AuditLogPage() {
     getCoreRowModel: getCoreRowModel(),
   });
 
-  const totalPages = data ? Math.ceil(data.total / data.pageSize) : 1;
+  const totalPages = data
+    ? Math.max(1, Math.ceil(data.total / data.pageSize))
+    : 1;
   const hasFilters = filterAction || filterActorId || filterFrom || filterTo;
 
   const clearFilters = () => {

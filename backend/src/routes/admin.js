@@ -143,7 +143,9 @@ router.post(
       try {
         await client.query("BEGIN");
         const sheetResult = await client.query(
-          "SELECT * FROM timesheets WHERE id = $1 FOR UPDATE",
+          `SELECT t.*, u.name AS worker_name
+           FROM timesheets t JOIN users u ON u.id = t.user_id
+           WHERE t.id = $1 FOR UPDATE OF t`,
           [id],
         );
         const sheet = sheetResult.rows[0];
@@ -183,7 +185,7 @@ router.post(
           action: "approve",
           targetType: "timesheet",
           targetId: sheet.id,
-          targetName: `w/c ${sheet.week_start}`,
+          targetName: `${sheet.worker_name} w/c ${sheet.week_start}`,
           metadata: { bulk: true },
         });
         await client.query("COMMIT");
@@ -567,7 +569,6 @@ router.post("/users", requireAdmin, async (req, res) => {
       metadata: { email: newUser.email, role: newUser.role },
     });
     await createClient.query("COMMIT");
-    res.status(201).json(newUser);
   } catch (err) {
     await createClient.query("ROLLBACK");
     if (err.code === "23505")
@@ -576,6 +577,7 @@ router.post("/users", requireAdmin, async (req, res) => {
   } finally {
     createClient.release();
   }
+  res.status(201).json(newUser);
 });
 
 // Update user role
@@ -955,26 +957,47 @@ router.get("/audit", requireAdmin, async (req, res) => {
   const params = [];
   const conditions = ["1=1"];
 
+  const VALID_ACTIONS = [
+    "approve",
+    "reject",
+    "submit",
+    "recall",
+    "create_user",
+    "delete_user",
+    "change_role",
+    "reset_password",
+  ];
   if (req.query.action) {
+    if (!VALID_ACTIONS.includes(req.query.action))
+      return res.status(400).json({ error: "Invalid action filter" });
     params.push(req.query.action);
     conditions.push(`a.action = $${params.length}`);
   }
   if (req.query.actor_id) {
-    params.push(Number(req.query.actor_id));
+    const actorId = parseInt(req.query.actor_id, 10);
+    if (!Number.isInteger(actorId) || actorId <= 0)
+      return res.status(400).json({ error: "Invalid actor_id" });
+    params.push(actorId);
     conditions.push(`a.actor_id = $${params.length}`);
   }
   if (req.query.target_user_id) {
-    // target_user_id filters on logs where the target is a user with that id
-    params.push(Number(req.query.target_user_id));
+    const targetUserId = parseInt(req.query.target_user_id, 10);
+    if (!Number.isInteger(targetUserId) || targetUserId <= 0)
+      return res.status(400).json({ error: "Invalid target_user_id" });
+    params.push(targetUserId);
     conditions.push(
       `(a.target_type = 'user' AND a.target_id = $${params.length})`,
     );
   }
   if (req.query.from) {
+    if (!/^\d{4}-\d{2}-\d{2}(T[\d:.Z+-]+)?$/.test(req.query.from))
+      return res.status(400).json({ error: "Invalid 'from' date" });
     params.push(req.query.from);
     conditions.push(`a.created_at >= $${params.length}::TIMESTAMPTZ`);
   }
   if (req.query.to) {
+    if (!/^\d{4}-\d{2}-\d{2}(T[\d:.Z+-]+)?$/.test(req.query.to))
+      return res.status(400).json({ error: "Invalid 'to' date" });
     params.push(req.query.to);
     conditions.push(`a.created_at <= $${params.length}::TIMESTAMPTZ`);
   }
