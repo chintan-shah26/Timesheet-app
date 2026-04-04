@@ -109,6 +109,86 @@ router.get("/timesheets/:id", requireAdminOrLead, async (req, res) => {
   res.json({ ...sheet, entries: entries.rows });
 });
 
+// Bulk approve timesheets
+router.post(
+  "/timesheets/bulk-approve",
+  requireAdminOrLead,
+  async (req, res) => {
+    const { ids } = req.body;
+    const MAX_BULK = 100;
+    if (!Array.isArray(ids) || ids.length === 0)
+      return res.status(400).json({ error: "ids must be a non-empty array" });
+    if (ids.length > MAX_BULK)
+      return res.status(400).json({
+        error: `Cannot bulk approve more than ${MAX_BULK} timesheets at once`,
+      });
+
+    const approved = [];
+    const failed = [];
+    const leadTeamId = await getLeadTeamId(req.user);
+    if (req.user.role === "team_lead" && leadTeamId === null)
+      return res
+        .status(403)
+        .json({ error: "Team lead is not assigned to a team" });
+
+    for (const rawId of ids) {
+      const id = Number(rawId);
+      if (!Number.isInteger(id) || id <= 0) {
+        failed.push(rawId);
+        continue;
+      }
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const sheetResult = await client.query(
+          "SELECT * FROM timesheets WHERE id = $1 FOR UPDATE",
+          [id],
+        );
+        const sheet = sheetResult.rows[0];
+        if (!sheet) {
+          failed.push(id);
+          await client.query("ROLLBACK");
+          continue;
+        }
+
+        // team_lead: verify the timesheet belongs to their team
+        if (leadTeamId) {
+          const memberCheck = await client.query(
+            "SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2",
+            [leadTeamId, sheet.user_id],
+          );
+          if (!memberCheck.rows[0]) {
+            failed.push(id);
+            await client.query("ROLLBACK");
+            continue;
+          }
+        }
+
+        // Not submitted (already approved/rejected/draft) — skip, report as failed
+        if (sheet.status !== "submitted") {
+          failed.push(id);
+          await client.query("ROLLBACK");
+          continue;
+        }
+
+        await client.query(
+          "UPDATE timesheets SET status = 'approved', reviewed_at = NOW(), admin_note = NULL WHERE id = $1",
+          [id],
+        );
+        await client.query("COMMIT");
+        approved.push(id);
+      } catch (err) {
+        await client.query("ROLLBACK");
+        failed.push(id);
+      } finally {
+        client.release();
+      }
+    }
+
+    res.json({ approved, failed });
+  },
+);
+
 // Approve timesheet
 router.post("/timesheets/:id/approve", requireAdminOrLead, async (req, res) => {
   const sheetResult = await pool.query(
