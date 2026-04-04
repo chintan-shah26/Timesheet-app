@@ -24,6 +24,7 @@ export default function WeeklyTimesheet() {
   const [sheet, setSheet] = useState(null);
   const [entries, setEntries] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [recalling, setRecalling] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -52,8 +53,15 @@ export default function WeeklyTimesheet() {
   }
 
   async function recallSheet() {
-    await client.post(`/api/timesheets/${id}/recall`);
-    setSheet((s) => ({ ...s, status: "draft" }));
+    setRecalling(true);
+    try {
+      await client.post(`/api/timesheets/${id}/recall`);
+      setSheet((s) => ({ ...s, status: "draft" }));
+    } catch {
+      alert("Failed to recall timesheet. Please try again.");
+    } finally {
+      setRecalling(false);
+    }
   }
 
   async function submitSheet() {
@@ -146,8 +154,12 @@ export default function WeeklyTimesheet() {
             marginBottom: 16,
           }}
         >
-          <button className="btn btn-secondary" onClick={recallSheet}>
-            Edit Timesheet
+          <button
+            className="btn btn-secondary"
+            onClick={recallSheet}
+            disabled={recalling}
+          >
+            {recalling ? "Withdrawing…" : "Edit Timesheet"}
           </button>
           <small style={{ color: "#888" }}>
             This will withdraw your submission so you can make changes.

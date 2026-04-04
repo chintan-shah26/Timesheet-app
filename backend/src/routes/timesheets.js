@@ -7,6 +7,14 @@ function requireAuth(req, res, next) {
   next();
 }
 
+async function fetchSheet(id, userId) {
+  const result = await pool.query(
+    "SELECT * FROM timesheets WHERE id = $1 AND user_id = $2",
+    [id, userId],
+  );
+  return result.rows[0] ?? null;
+}
+
 // List all timesheets for current user
 router.get("/", requireAuth, async (req, res) => {
   const result = await pool.query(
@@ -25,11 +33,7 @@ router.get("/", requireAuth, async (req, res) => {
 
 // Get single timesheet with entries
 router.get("/:id", requireAuth, async (req, res) => {
-  const sheetResult = await pool.query(
-    "SELECT * FROM timesheets WHERE id = $1 AND user_id = $2",
-    [req.params.id, req.user.id],
-  );
-  const sheet = sheetResult.rows[0];
+  const sheet = await fetchSheet(req.params.id, req.user.id);
   if (!sheet) return res.status(404).json({ error: "Not found" });
 
   const entries = await pool.query(
@@ -62,11 +66,7 @@ router.post("/", requireAuth, async (req, res) => {
 
 // Save/update entries (array of day objects)
 router.put("/:id/entries", requireAuth, async (req, res) => {
-  const sheetResult = await pool.query(
-    "SELECT * FROM timesheets WHERE id = $1 AND user_id = $2",
-    [req.params.id, req.user.id],
-  );
-  const sheet = sheetResult.rows[0];
+  const sheet = await fetchSheet(req.params.id, req.user.id);
   if (!sheet) return res.status(404).json({ error: "Not found" });
   if (sheet.status !== "draft")
     return res
@@ -113,11 +113,7 @@ router.put("/:id/entries", requireAuth, async (req, res) => {
 
 // Recall a submitted or rejected timesheet back to draft
 router.post("/:id/recall", requireAuth, async (req, res) => {
-  const sheetResult = await pool.query(
-    "SELECT * FROM timesheets WHERE id = $1 AND user_id = $2",
-    [req.params.id, req.user.id],
-  );
-  const sheet = sheetResult.rows[0];
+  const sheet = await fetchSheet(req.params.id, req.user.id);
   if (!sheet) return res.status(404).json({ error: "Not found" });
   if (!["submitted", "rejected"].includes(sheet.status))
     return res
@@ -133,11 +129,7 @@ router.post("/:id/recall", requireAuth, async (req, res) => {
 
 // Submit timesheet for review
 router.post("/:id/submit", requireAuth, async (req, res) => {
-  const sheetResult = await pool.query(
-    "SELECT * FROM timesheets WHERE id = $1 AND user_id = $2",
-    [req.params.id, req.user.id],
-  );
-  const sheet = sheetResult.rows[0];
+  const sheet = await fetchSheet(req.params.id, req.user.id);
   if (!sheet) return res.status(404).json({ error: "Not found" });
   if (sheet.status !== "draft")
     return res
