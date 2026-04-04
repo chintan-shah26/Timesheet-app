@@ -2,6 +2,7 @@ const express = require("express");
 const { pool } = require("../db");
 const router = express.Router();
 const { streamTimesheetPdf } = require("../lib/pdf");
+const { logAction } = require("../audit");
 
 function requireAuth(req, res, next) {
   if (!req.user) return res.status(401).json({ error: "Not authenticated" });
@@ -270,10 +271,29 @@ router.post("/:id/recall", requireAuth, async (req, res) => {
       .status(400)
       .json({ error: "Only submitted or rejected timesheets can be recalled" });
 
-  await pool.query(
-    "UPDATE timesheets SET status = 'draft', submitted_at = NULL WHERE id = $1",
-    [sheet.id],
-  );
+  const recallClient = await pool.connect();
+  try {
+    await recallClient.query("BEGIN");
+    await recallClient.query(
+      "UPDATE timesheets SET status = 'draft', submitted_at = NULL WHERE id = $1",
+      [sheet.id],
+    );
+    await logAction(recallClient, {
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: "recall",
+      targetType: "timesheet",
+      targetId: sheet.id,
+      targetName: `w/c ${sheet.week_start}`,
+      metadata: null,
+    });
+    await recallClient.query("COMMIT");
+  } catch (err) {
+    await recallClient.query("ROLLBACK");
+    throw err;
+  } finally {
+    recallClient.release();
+  }
   res.json({ ok: true });
 });
 
@@ -377,10 +397,29 @@ router.post("/:id/submit", requireAuth, async (req, res) => {
       .status(400)
       .json({ error: "Only draft timesheets can be submitted" });
 
-  await pool.query(
-    "UPDATE timesheets SET status = 'submitted', submitted_at = NOW() WHERE id = $1",
-    [sheet.id],
-  );
+  const submitClient = await pool.connect();
+  try {
+    await submitClient.query("BEGIN");
+    await submitClient.query(
+      "UPDATE timesheets SET status = 'submitted', submitted_at = NOW() WHERE id = $1",
+      [sheet.id],
+    );
+    await logAction(submitClient, {
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: "submit",
+      targetType: "timesheet",
+      targetId: sheet.id,
+      targetName: `w/c ${sheet.week_start}`,
+      metadata: null,
+    });
+    await submitClient.query("COMMIT");
+  } catch (err) {
+    await submitClient.query("ROLLBACK");
+    throw err;
+  } finally {
+    submitClient.release();
+  }
   res.json({ ok: true });
 });
 

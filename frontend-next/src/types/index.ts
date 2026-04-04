@@ -123,6 +123,35 @@ export interface AppSettings {
   overtime_threshold_hours: string;
 }
 
+export type AuditAction =
+  | "approve"
+  | "reject"
+  | "submit"
+  | "recall"
+  | "create_user"
+  | "delete_user"
+  | "change_role"
+  | "reset_password";
+
+export interface AuditLog {
+  id: number;
+  actor_id: number | null;
+  actor_name: string | null;
+  action: AuditAction;
+  target_type: "timesheet" | "user";
+  target_id: number | null;
+  target_name: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface AuditLogPage {
+  data: AuditLog[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // Monthly report — single employee
 export interface EmployeeReportSummary {
   total_present_days: number;

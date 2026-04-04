@@ -10,6 +10,7 @@ import {
   UsersRound,
   CalendarDays,
   Umbrella,
+  ScrollText,
   Settings,
   LogOut,
   type LucideProps,
@@ -37,6 +38,7 @@ const adminNav: NavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/holidays", label: "Holidays", icon: CalendarDays },
   { href: "/admin/leave", label: "Leave", icon: Umbrella },
+  { href: "/admin/audit", label: "Audit Log", icon: ScrollText },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
