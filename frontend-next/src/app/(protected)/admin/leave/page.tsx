@@ -23,6 +23,7 @@ export default function LeaveBalancePage() {
   // Track inline edits: userId -> draftValue
   const [drafts, setDrafts] = useState<Record<number, string>>({});
   const [saveError, setSaveError] = useState<Record<number, string>>({});
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   const { data: balances = [], isLoading } = useQuery({
     queryKey: QUERY_KEYS.balances(selectedYear),
@@ -32,6 +33,7 @@ export default function LeaveBalancePage() {
   const saveMutation = useMutation({
     mutationFn: setLeaveBalance,
     onSuccess: (_, variables) => {
+      setSavingId(null);
       void queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.balances(selectedYear),
       });
@@ -47,6 +49,7 @@ export default function LeaveBalancePage() {
       });
     },
     onError: (err: unknown, variables) => {
+      setSavingId(null);
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data
           ?.error ?? "Failed to save.";
@@ -56,7 +59,7 @@ export default function LeaveBalancePage() {
 
   function handleSave(balance: AdminLeaveBalance) {
     const raw = drafts[balance.user_id];
-    const days = raw !== undefined ? parseInt(raw) : balance.allocated_days;
+    const days = raw !== undefined ? Number(raw) : balance.allocated_days;
     if (!Number.isInteger(days) || days < 0) {
       setSaveError((e) => ({
         ...e,
@@ -64,6 +67,7 @@ export default function LeaveBalancePage() {
       }));
       return;
     }
+    setSavingId(balance.user_id);
     saveMutation.mutate({
       user_id: balance.user_id,
       year: selectedYear,
@@ -188,7 +192,10 @@ export default function LeaveBalancePage() {
                           <Button
                             size="sm"
                             onClick={() => handleSave(balance)}
-                            disabled={saveMutation.isPending}
+                            disabled={
+                              saveMutation.isPending &&
+                              savingId === balance.user_id
+                            }
                           >
                             Save
                           </Button>

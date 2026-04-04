@@ -15,6 +15,13 @@ async function fetchSheet(id, userId) {
   return result.rows[0] ?? null;
 }
 
+// Add 7 days to a YYYY-MM-DD string (UTC, no timezone shift)
+function addSevenDays(dateStr) {
+  const d = new Date(dateStr + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + 7);
+  return d.toISOString().substring(0, 10);
+}
+
 // List all timesheets for current user
 router.get("/", requireAuth, async (req, res) => {
   const result = await pool.query(
@@ -31,22 +38,11 @@ router.get("/", requireAuth, async (req, res) => {
   res.json(result.rows);
 });
 
-// Get single timesheet with entries
-router.get("/:id", requireAuth, async (req, res) => {
-  const sheet = await fetchSheet(req.params.id, req.user.id);
-  if (!sheet) return res.status(404).json({ error: "Not found" });
-
-  const entries = await pool.query(
-    "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
-    [sheet.id],
-  );
-  res.json({ ...sheet, entries: entries.rows });
-});
-
 // Get leave balance for the authenticated worker
+// MUST be registered before GET /:id to avoid route shadowing
 router.get("/leave-balance", requireAuth, async (req, res) => {
   const year = req.query.year
-    ? parseInt(req.query.year)
+    ? Number(req.query.year)
     : new Date().getFullYear();
   if (!Number.isInteger(year) || year < 2000 || year > 2100)
     return res.status(400).json({ error: "Invalid year" });
@@ -78,11 +74,27 @@ router.get("/leave-balance", requireAuth, async (req, res) => {
   });
 });
 
+// Get single timesheet with entries
+router.get("/:id", requireAuth, async (req, res) => {
+  const sheet = await fetchSheet(req.params.id, req.user.id);
+  if (!sheet) return res.status(404).json({ error: "Not found" });
+
+  const entries = await pool.query(
+    "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
+    [sheet.id],
+  );
+  res.json({ ...sheet, entries: entries.rows });
+});
+
 // Create new timesheet for a week (pre-fills holiday entries)
 router.post("/", requireAuth, async (req, res) => {
   const { week_start } = req.body;
-  if (!week_start)
-    return res.status(400).json({ error: "week_start required" });
+  if (!week_start || !/^\d{4}-\d{2}-\d{2}$/.test(week_start))
+    return res
+      .status(400)
+      .json({
+        error: "week_start is required and must be in YYYY-MM-DD format",
+      });
 
   const client = await pool.connect();
   try {
@@ -139,6 +151,8 @@ router.put("/:id/entries", requireAuth, async (req, res) => {
   const { entries } = req.body;
   if (!Array.isArray(entries))
     return res.status(400).json({ error: "entries must be an array" });
+  if (entries.length > 7)
+    return res.status(400).json({ error: "entries must have at most 7 items" });
 
   const client = await pool.connect();
   try {
@@ -203,34 +217,40 @@ router.post("/:id/copy-last-week", requireAuth, async (req, res) => {
       .status(409)
       .json({ error: "Cannot copy into a submitted timesheet" });
 
-  // Find the previous week's timesheet
-  const prevResult = await pool.query(
-    `SELECT * FROM timesheets
-     WHERE user_id = $1 AND week_start = $2::DATE - INTERVAL '7 days'`,
-    [req.user.id, sheet.week_start],
-  );
-  const prevSheet = prevResult.rows[0];
-  if (!prevSheet)
-    return res.status(404).json({ error: "No previous week timesheet found" });
-
-  const prevEntries = await pool.query(
-    "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
-    [prevSheet.id],
-  );
-  if (prevEntries.rows.length === 0)
-    return res.status(404).json({ error: "Previous week has no entries" });
-
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
+    // Find the previous week's timesheet (inside transaction for snapshot consistency)
+    const prevResult = await client.query(
+      `SELECT * FROM timesheets
+       WHERE user_id = $1 AND week_start = $2::DATE - INTERVAL '7 days'`,
+      [req.user.id, sheet.week_start],
+    );
+    const prevSheet = prevResult.rows[0];
+    if (!prevSheet) {
+      await client.query("ROLLBACK");
+      return res
+        .status(404)
+        .json({ error: "No previous week timesheet found" });
+    }
+
+    const prevEntries = await client.query(
+      "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
+      [prevSheet.id],
+    );
+    if (prevEntries.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Previous week has no entries" });
+    }
+
     for (const prev of prevEntries.rows) {
-      // Map to current week (always exactly 7 days later)
-      const dateResult = await client.query(
-        "SELECT ($1::DATE + INTERVAL '7 days')::DATE::TEXT AS d",
-        [prev.date],
+      // Map to current week: previous date + 7 days (no DB round-trip needed)
+      const curDate = addSevenDays(
+        prev.date instanceof Date
+          ? prev.date.toISOString().substring(0, 10)
+          : String(prev.date).substring(0, 10),
       );
-      const curDate = dateResult.rows[0].d;
 
       // Skip entries the worker has already edited
       const existing = await client.query(

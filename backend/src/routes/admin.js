@@ -390,7 +390,7 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
 router.get("/holidays", requireAdmin, async (req, res) => {
   const { year } = req.query;
   if (year) {
-    const yearInt = parseInt(year);
+    const yearInt = Number(year);
     if (!Number.isInteger(yearInt) || yearInt < 2000 || yearInt > 2100)
       return res.status(400).json({ error: "Invalid year" });
     const result = await pool.query(
@@ -412,6 +412,11 @@ router.post("/holidays", requireAdmin, async (req, res) => {
     return res.status(400).json({ error: "date and name are required" });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
     return res.status(400).json({ error: "date must be YYYY-MM-DD" });
+
+  // Reject semantically invalid dates (e.g. 2026-02-30)
+  const parsed = new Date(date + "T00:00:00Z");
+  if (isNaN(parsed.getTime()) || parsed.toISOString().substring(0, 10) !== date)
+    return res.status(400).json({ error: "Invalid calendar date" });
 
   try {
     const result = await pool.query(
@@ -445,7 +450,7 @@ router.delete("/holidays/:id", requireAdmin, async (req, res) => {
 // List leave balances for all workers (optional ?year=YYYY)
 router.get("/leave-balances", requireAdmin, async (req, res) => {
   const year = req.query.year
-    ? parseInt(req.query.year)
+    ? Number(req.query.year)
     : new Date().getFullYear();
   if (!Number.isInteger(year) || year < 2000 || year > 2100)
     return res.status(400).json({ error: "Invalid year" });
@@ -459,7 +464,7 @@ router.get("/leave-balances", requireAdmin, async (req, res) => {
                AND EXTRACT(YEAR FROM te.date) = $1
                AND t.status IN ('submitted', 'approved')
               THEN 1
-            END) AS used_days
+            END)::INTEGER AS used_days
      FROM users u
      LEFT JOIN leave_balances lb ON lb.user_id = u.id AND lb.year = $1
      LEFT JOIN timesheets t ON t.user_id = u.id
@@ -486,10 +491,10 @@ router.post("/leave-balances", requireAdmin, async (req, res) => {
     return res
       .status(400)
       .json({ error: "year must be between 2000 and 2100" });
-  if (!Number.isInteger(days) || days < 0)
+  if (!Number.isInteger(days) || days < 0 || days > 365)
     return res
       .status(400)
-      .json({ error: "allocated_days must be a non-negative integer" });
+      .json({ error: "allocated_days must be between 0 and 365" });
 
   const userCheck = await pool.query(
     "SELECT id FROM users WHERE id = $1 AND role = 'worker'",

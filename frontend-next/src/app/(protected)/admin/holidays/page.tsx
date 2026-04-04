@@ -24,6 +24,7 @@ export default function HolidaysPage() {
   const [newDate, setNewDate] = useState("");
   const [newName, setNewName] = useState("");
   const [formError, setFormError] = useState("");
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const { data: holidays = [], isLoading } = useQuery({
     queryKey: QUERY_KEYS.holidays(selectedYear),
@@ -51,11 +52,15 @@ export default function HolidaysPage() {
   const deleteMutation = useMutation({
     mutationFn: deleteHoliday,
     onSuccess: () => {
+      setDeletingId(null);
       void queryClient.invalidateQueries({
         queryKey: QUERY_KEYS.holidays(selectedYear),
       });
     },
-    onError: () => alert("Failed to delete holiday."),
+    onError: () => {
+      setDeletingId(null);
+      alert("Failed to delete holiday.");
+    },
   });
 
   function handleAdd() {
@@ -187,10 +192,17 @@ export default function HolidaysPage() {
                       <Button
                         size="sm"
                         variant="danger"
-                        onClick={() => deleteMutation.mutate(holiday.id)}
-                        disabled={deleteMutation.isPending}
+                        onClick={() => {
+                          setDeletingId(holiday.id);
+                          deleteMutation.mutate(holiday.id);
+                        }}
+                        disabled={
+                          deleteMutation.isPending && deletingId === holiday.id
+                        }
                       >
-                        Delete
+                        {deleteMutation.isPending && deletingId === holiday.id
+                          ? "Deleting…"
+                          : "Delete"}
                       </Button>
                     </td>
                   </tr>
