@@ -76,6 +76,22 @@ async function initSchema() {
       value      TEXT NOT NULL,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id          SERIAL PRIMARY KEY,
+      actor_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      actor_name  TEXT,
+      action      TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      target_id   INTEGER,
+      target_name TEXT,
+      metadata    JSONB,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS audit_logs_actor_id_idx   ON audit_logs (actor_id);
+    CREATE INDEX IF NOT EXISTS audit_logs_action_idx     ON audit_logs (action);
+    CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at DESC);
   `);
 
   // Seed default settings (idempotent)

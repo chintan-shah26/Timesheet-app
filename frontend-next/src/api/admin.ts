@@ -13,6 +13,8 @@ import type {
   BulkApproveResult,
   WeeklySummary,
   AppSettings,
+  AuditLogPage,
+  AuditAction,
 } from "@/types";
 
 // Timesheets
@@ -224,4 +226,16 @@ export async function updateSetting(key: string, value: string): Promise<void> {
 
 export function getAdminTimesheetPdfUrl(id: number): string {
   return `${apiClient.defaults.baseURL}/api/admin/timesheets/${id}/export/pdf`;
+}
+
+export async function getAuditLog(params: {
+  action?: AuditAction;
+  actor_id?: string;
+  target_user_id?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+}): Promise<AuditLogPage> {
+  const r = await apiClient.get<AuditLogPage>("/api/admin/audit", { params });
+  return r.data;
 }

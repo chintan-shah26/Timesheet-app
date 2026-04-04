@@ -8,4 +8,4 @@
 | 4   | Worker experience: leave balance tracker, public holidays pre-fill, copy last week                                      | implemented | —            |
 | 5   | Admin & manager experience: bulk approve, submission reminder emails                                                    | implemented | 3            |
 | 6   | Reporting enhancements: dashboard charts, overtime tracking, PDF export                                                 | implemented | 3            |
-| 7   | Platform & governance: audit log for all timesheet and user actions                                                     | specifying  | —            |
+| 7   | Platform & governance: audit log for all timesheet and user actions                                                     | implemented | —            |

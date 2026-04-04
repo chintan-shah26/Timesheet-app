@@ -3,6 +3,7 @@ const ExcelJS = require("exceljs");
 const { pool } = require("../db");
 const { hashPassword } = require("../auth");
 const { streamTimesheetPdf } = require("../lib/pdf");
+const { logAction } = require("../audit");
 const router = express.Router();
 
 function requireAdmin(req, res, next) {
@@ -142,7 +143,9 @@ router.post(
       try {
         await client.query("BEGIN");
         const sheetResult = await client.query(
-          "SELECT * FROM timesheets WHERE id = $1 FOR UPDATE",
+          `SELECT t.*, u.name AS worker_name
+           FROM timesheets t JOIN users u ON u.id = t.user_id
+           WHERE t.id = $1 FOR UPDATE OF t`,
           [id],
         );
         const sheet = sheetResult.rows[0];
@@ -176,6 +179,15 @@ router.post(
           "UPDATE timesheets SET status = 'approved', reviewed_at = NOW(), admin_note = NULL WHERE id = $1",
           [id],
         );
+        await logAction(client, {
+          actorId: req.user.id,
+          actorName: req.user.name,
+          action: "approve",
+          targetType: "timesheet",
+          targetId: sheet.id,
+          targetName: `${sheet.worker_name} w/c ${sheet.week_start}`,
+          metadata: { bulk: true },
+        });
         await client.query("COMMIT");
         approved.push(id);
       } catch (err) {
@@ -193,7 +205,7 @@ router.post(
 // Approve timesheet
 router.post("/timesheets/:id/approve", requireAdminOrLead, async (req, res) => {
   const sheetResult = await pool.query(
-    "SELECT * FROM timesheets WHERE id = $1",
+    "SELECT t.*, u.name AS worker_name FROM timesheets t JOIN users u ON u.id = t.user_id WHERE t.id = $1",
     [req.params.id],
   );
   const sheet = sheetResult.rows[0];
@@ -219,17 +231,36 @@ router.post("/timesheets/:id/approve", requireAdminOrLead, async (req, res) => {
       .status(400)
       .json({ error: "Only submitted timesheets can be approved" });
 
-  await pool.query(
-    "UPDATE timesheets SET status = 'approved', reviewed_at = NOW(), admin_note = NULL WHERE id = $1",
-    [sheet.id],
-  );
+  const approveClient = await pool.connect();
+  try {
+    await approveClient.query("BEGIN");
+    await approveClient.query(
+      "UPDATE timesheets SET status = 'approved', reviewed_at = NOW(), admin_note = NULL WHERE id = $1",
+      [sheet.id],
+    );
+    await logAction(approveClient, {
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: "approve",
+      targetType: "timesheet",
+      targetId: sheet.id,
+      targetName: `${sheet.worker_name} w/c ${sheet.week_start}`,
+      metadata: null,
+    });
+    await approveClient.query("COMMIT");
+  } catch (err) {
+    await approveClient.query("ROLLBACK");
+    throw err;
+  } finally {
+    approveClient.release();
+  }
   res.json({ ok: true });
 });
 
 // Reject timesheet
 router.post("/timesheets/:id/reject", requireAdminOrLead, async (req, res) => {
   const sheetResult = await pool.query(
-    "SELECT * FROM timesheets WHERE id = $1",
+    "SELECT t.*, u.name AS worker_name FROM timesheets t JOIN users u ON u.id = t.user_id WHERE t.id = $1",
     [req.params.id],
   );
   const sheet = sheetResult.rows[0];
@@ -256,10 +287,33 @@ router.post("/timesheets/:id/reject", requireAdminOrLead, async (req, res) => {
       .json({ error: "Only submitted timesheets can be rejected" });
 
   const { note } = req.body;
-  await pool.query(
-    "UPDATE timesheets SET status = 'draft', reviewed_at = NOW(), admin_note = $1 WHERE id = $2",
-    [note ?? null, sheet.id],
-  );
+  if (note && note.length > 1000)
+    return res
+      .status(400)
+      .json({ error: "Rejection note must be 1000 characters or fewer" });
+  const rejectClient = await pool.connect();
+  try {
+    await rejectClient.query("BEGIN");
+    await rejectClient.query(
+      "UPDATE timesheets SET status = 'draft', reviewed_at = NOW(), admin_note = $1 WHERE id = $2",
+      [note ?? null, sheet.id],
+    );
+    await logAction(rejectClient, {
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: "reject",
+      targetType: "timesheet",
+      targetId: sheet.id,
+      targetName: `${sheet.worker_name} w/c ${sheet.week_start}`,
+      metadata: note ? { rejection_note: note } : null,
+    });
+    await rejectClient.query("COMMIT");
+  } catch (err) {
+    await rejectClient.query("ROLLBACK");
+    throw err;
+  } finally {
+    rejectClient.release();
+  }
   res.json({ ok: true });
 });
 
@@ -501,17 +555,33 @@ router.post("/users", requireAdmin, async (req, res) => {
       .json({ error: "Password must be at least 8 characters" });
 
   const hash = await hashPassword(password);
+  const createClient = await pool.connect();
   try {
-    const result = await pool.query(
+    await createClient.query("BEGIN");
+    const result = await createClient.query(
       "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role",
       [email.toLowerCase().trim(), name, hash, role],
     );
-    res.status(201).json(result.rows[0]);
+    const newUser = result.rows[0];
+    await logAction(createClient, {
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: "create_user",
+      targetType: "user",
+      targetId: newUser.id,
+      targetName: newUser.name,
+      metadata: { role: newUser.role },
+    });
+    await createClient.query("COMMIT");
   } catch (err) {
+    await createClient.query("ROLLBACK");
     if (err.code === "23505")
       return res.status(409).json({ error: "Email already exists" });
     throw err;
+  } finally {
+    createClient.release();
   }
+  res.status(201).json(newUser);
 });
 
 // Update user role
@@ -522,12 +592,36 @@ router.patch("/users/:id/role", requireAdmin, async (req, res) => {
   if (!["worker", "admin"].includes(role))
     return res.status(400).json({ error: "Invalid role" });
 
-  const result = await pool.query("UPDATE users SET role = $1 WHERE id = $2", [
-    role,
-    req.params.id,
-  ]);
-  if (result.rowCount === 0)
-    return res.status(404).json({ error: "User not found" });
+  const targetResult = await pool.query(
+    "SELECT id, name, role FROM users WHERE id = $1",
+    [req.params.id],
+  );
+  const target = targetResult.rows[0];
+  if (!target) return res.status(404).json({ error: "User not found" });
+
+  const roleClient = await pool.connect();
+  try {
+    await roleClient.query("BEGIN");
+    await roleClient.query("UPDATE users SET role = $1 WHERE id = $2", [
+      role,
+      target.id,
+    ]);
+    await logAction(roleClient, {
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: "change_role",
+      targetType: "user",
+      targetId: target.id,
+      targetName: target.name,
+      metadata: { old_role: target.role, new_role: role },
+    });
+    await roleClient.query("COMMIT");
+  } catch (err) {
+    await roleClient.query("ROLLBACK");
+    throw err;
+  } finally {
+    roleClient.release();
+  }
   res.json({ ok: true });
 });
 
@@ -540,7 +634,7 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
       .json({ error: "You cannot delete your own account" });
 
   const targetResult = await pool.query(
-    "SELECT id, role FROM users WHERE id = $1",
+    "SELECT id, name, role FROM users WHERE id = $1",
     [targetId],
   );
   const target = targetResult.rows[0];
@@ -557,8 +651,29 @@ router.delete("/users/:id", requireAdmin, async (req, res) => {
     }
   }
 
-  await pool.query("DELETE FROM timesheets WHERE user_id = $1", [targetId]);
-  await pool.query("DELETE FROM users WHERE id = $1", [targetId]);
+  const deleteClient = await pool.connect();
+  try {
+    await deleteClient.query("BEGIN");
+    await deleteClient.query("DELETE FROM timesheets WHERE user_id = $1", [
+      targetId,
+    ]);
+    await deleteClient.query("DELETE FROM users WHERE id = $1", [targetId]);
+    await logAction(deleteClient, {
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: "delete_user",
+      targetType: "user",
+      targetId: target.id,
+      targetName: target.name,
+      metadata: { role: target.role },
+    });
+    await deleteClient.query("COMMIT");
+  } catch (err) {
+    await deleteClient.query("ROLLBACK");
+    throw err;
+  } finally {
+    deleteClient.release();
+  }
   res.json({ ok: true });
 });
 
@@ -698,13 +813,37 @@ router.patch("/users/:id/password", requireAdmin, async (req, res) => {
       .status(400)
       .json({ error: "Password must be at least 8 characters" });
 
-  const hash = await hashPassword(password);
-  const result = await pool.query(
-    "UPDATE users SET password_hash = $1 WHERE id = $2",
-    [hash, req.params.id],
+  const targetResult = await pool.query(
+    "SELECT id, name FROM users WHERE id = $1",
+    [req.params.id],
   );
-  if (result.rowCount === 0)
-    return res.status(404).json({ error: "User not found" });
+  const target = targetResult.rows[0];
+  if (!target) return res.status(404).json({ error: "User not found" });
+
+  const hash = await hashPassword(password);
+  const pwClient = await pool.connect();
+  try {
+    await pwClient.query("BEGIN");
+    await pwClient.query("UPDATE users SET password_hash = $1 WHERE id = $2", [
+      hash,
+      target.id,
+    ]);
+    await logAction(pwClient, {
+      actorId: req.user.id,
+      actorName: req.user.name,
+      action: "reset_password",
+      targetType: "user",
+      targetId: target.id,
+      targetName: target.name,
+      metadata: null,
+    });
+    await pwClient.query("COMMIT");
+  } catch (err) {
+    await pwClient.query("ROLLBACK");
+    throw err;
+  } finally {
+    pwClient.release();
+  }
   res.json({ ok: true });
 });
 
@@ -812,5 +951,85 @@ router.get(
     streamTimesheetPdf(res, sheet, entries.rows, threshold);
   },
 );
+
+// Audit log — paginated, filterable by action/actor/target_user/date range
+router.get("/audit", requireAdmin, async (req, res) => {
+  const PAGE_SIZE = 50;
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const params = [];
+  const conditions = ["1=1"];
+
+  const VALID_ACTIONS = [
+    "approve",
+    "reject",
+    "submit",
+    "recall",
+    "create_user",
+    "delete_user",
+    "change_role",
+    "reset_password",
+  ];
+  if (req.query.action) {
+    if (!VALID_ACTIONS.includes(req.query.action))
+      return res.status(400).json({ error: "Invalid action filter" });
+    params.push(req.query.action);
+    conditions.push(`a.action = $${params.length}`);
+  }
+  if (req.query.actor_id) {
+    const actorId = parseInt(req.query.actor_id, 10);
+    if (!Number.isInteger(actorId) || actorId <= 0)
+      return res.status(400).json({ error: "Invalid actor_id" });
+    params.push(actorId);
+    conditions.push(`a.actor_id = $${params.length}`);
+  }
+  if (req.query.target_user_id) {
+    const targetUserId = parseInt(req.query.target_user_id, 10);
+    if (!Number.isInteger(targetUserId) || targetUserId <= 0)
+      return res.status(400).json({ error: "Invalid target_user_id" });
+    params.push(targetUserId);
+    conditions.push(
+      `(a.target_type = 'user' AND a.target_id = $${params.length})`,
+    );
+  }
+  if (req.query.from) {
+    if (!/^\d{4}-\d{2}-\d{2}(T[\d:.Z+-]+)?$/.test(req.query.from))
+      return res.status(400).json({ error: "Invalid 'from' date" });
+    params.push(req.query.from);
+    conditions.push(`a.created_at >= $${params.length}::TIMESTAMPTZ`);
+  }
+  if (req.query.to) {
+    if (!/^\d{4}-\d{2}-\d{2}(T[\d:.Z+-]+)?$/.test(req.query.to))
+      return res.status(400).json({ error: "Invalid 'to' date" });
+    params.push(req.query.to);
+    conditions.push(`a.created_at <= $${params.length}::TIMESTAMPTZ`);
+  }
+
+  const where = conditions.join(" AND ");
+
+  const [dataResult, countResult] = await Promise.all([
+    pool.query(
+      `SELECT a.id, a.actor_id, a.actor_name, a.action, a.target_type,
+              a.target_id, a.target_name, a.metadata, a.created_at
+       FROM audit_logs a
+       WHERE ${where}
+       ORDER BY a.created_at DESC
+       LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
+      params,
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS total FROM audit_logs a WHERE ${where}`,
+      params,
+    ),
+  ]);
+
+  res.json({
+    data: dataResult.rows,
+    total: parseInt(countResult.rows[0].total),
+    page,
+    pageSize: PAGE_SIZE,
+  });
+});
 
 module.exports = router;
