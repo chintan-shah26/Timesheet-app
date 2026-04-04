@@ -72,6 +72,7 @@ export default function WeeklyTimesheetPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     },
+    onError: () => alert("Failed to save. Please try again."),
   });
 
   const submitMutation = useMutation({
@@ -85,6 +86,7 @@ export default function WeeklyTimesheetPage() {
       });
       setShowSubmitModal(false);
     },
+    onError: () => alert("Failed to submit. Please try again."),
   });
 
   const recallMutation = useMutation({
@@ -159,8 +161,8 @@ export default function WeeklyTimesheetPage() {
               </span>
             ))}
           </div>
-          {entries.map((_, i) => (
-            <DayRow key={i} index={i} readOnly={readOnly} />
+          {entries.map((entry, i) => (
+            <DayRow key={entry.date} index={i} readOnly={readOnly} />
           ))}
         </Card>
 

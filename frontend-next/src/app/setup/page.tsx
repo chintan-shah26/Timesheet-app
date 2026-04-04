@@ -78,7 +78,7 @@ export default function SetupPage() {
               Email
             </label>
             <Input
-              type="text"
+              type="email"
               placeholder="admin@example.com"
               {...register("email", { required: "Email is required" })}
             />
