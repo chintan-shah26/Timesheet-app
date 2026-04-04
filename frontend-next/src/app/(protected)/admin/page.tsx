@@ -84,7 +84,7 @@ export default function AdminDashboardPage() {
     });
 
   const approveMutation = useMutation({
-    mutationFn: () => approveTimesheet(selected!.id),
+    mutationFn: (sheetId: number) => approveTimesheet(sheetId),
     onSuccess: () => {
       void invalidate();
       setSelected(null);
@@ -93,7 +93,8 @@ export default function AdminDashboardPage() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: () => rejectTimesheet(selected!.id, rejectNote),
+    mutationFn: ({ id, note }: { id: number; note: string }) =>
+      rejectTimesheet(id, note),
     onSuccess: () => {
       void invalidate();
       setSelected(null);
@@ -309,7 +310,7 @@ export default function AdminDashboardPage() {
               <div className="flex gap-3">
                 <Button
                   variant="success"
-                  onClick={() => approveMutation.mutate()}
+                  onClick={() => approveMutation.mutate(selected.id)}
                   disabled={approveMutation.isPending}
                 >
                   ✓ Approve
@@ -338,7 +339,12 @@ export default function AdminDashboardPage() {
                 <div className="flex gap-3">
                   <Button
                     variant="danger"
-                    onClick={() => rejectMutation.mutate()}
+                    onClick={() =>
+                      rejectMutation.mutate({
+                        id: selected.id,
+                        note: rejectNote,
+                      })
+                    }
                     disabled={rejectMutation.isPending}
                   >
                     Confirm Reject

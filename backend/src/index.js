@@ -72,16 +72,20 @@ app.use(
 
 // Attach user to req from session
 app.use(async (req, res, next) => {
-  if (req.session.userId) {
-    const result = await pool.query(
-      "SELECT id, email, name, role FROM users WHERE id = $1",
-      [req.session.userId],
-    );
-    req.user = result.rows[0] || null;
-  } else {
-    req.user = null;
+  try {
+    if (req.session.userId) {
+      const result = await pool.query(
+        "SELECT id, email, name, role FROM users WHERE id = $1",
+        [req.session.userId],
+      );
+      req.user = result.rows[0] || null;
+    } else {
+      req.user = null;
+    }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
 
 // Routes
