@@ -113,6 +113,8 @@ router.get("/reports/monthly/employee", requireAdmin, async (req, res) => {
     return res
       .status(400)
       .json({ error: "month query param required (YYYY-MM)" });
+  if (!/^\d{4}-\d{2}$/.test(month))
+    return res.status(400).json({ error: "month must be in YYYY-MM format" });
   if (!user_id)
     return res.status(400).json({ error: "user_id query param required" });
 
@@ -275,6 +277,8 @@ router.get("/reports/monthly", requireAdmin, async (req, res) => {
     return res
       .status(400)
       .json({ error: "month query param required (YYYY-MM)" });
+  if (!/^\d{4}-\d{2}$/.test(month))
+    return res.status(400).json({ error: "month must be in YYYY-MM format" });
 
   const result = await pool.query(
     `

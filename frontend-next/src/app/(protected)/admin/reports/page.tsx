@@ -31,6 +31,10 @@ function defaultMonth() {
   return format(new Date(), "yyyy-MM");
 }
 
+function safeCsvCell(val: string): string {
+  return /^[=+\-@\t\r]/.test(val) ? `'${val}` : val;
+}
+
 function downloadCsv(content: string, filename: string) {
   const blob = new Blob([content], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
@@ -130,7 +134,7 @@ export default function MonthlyReportPage() {
       const header = "Date,Present,Hours,Work Type,Notes,Timesheet Status";
       const rows = employeeReport.entries.map(
         (e) =>
-          `${e.date},${e.is_present ? "Yes" : "No"},${e.is_present && e.hours ? e.hours : ""},"${e.work_type ?? ""}","${(e.notes ?? "").replace(/"/g, '""')}",${e.timesheet_status}`,
+          `${e.date},${e.is_present ? "Yes" : "No"},${e.is_present && e.hours ? e.hours : ""},"${safeCsvCell(e.work_type ?? "")}","${safeCsvCell((e.notes ?? "").replace(/"/g, '""'))}",${e.timesheet_status}`,
       );
       rows.push(
         `TOTAL,${employeeReport.summary.total_present_days} days,${employeeReport.summary.total_hours}h,,,`,
@@ -143,7 +147,7 @@ export default function MonthlyReportPage() {
       const header = "Name,Email,Approved Timesheets,Present Days,Total Hours";
       const rows = teamReport.workers.map(
         (w) =>
-          `"${w.name}","${w.email}",${w.timesheet_count},${w.total_present_days},${w.total_hours}`,
+          `"${safeCsvCell(w.name)}","${safeCsvCell(w.email)}",${w.timesheet_count},${w.total_present_days},${w.total_hours}`,
       );
       downloadCsv(
         [header, ...rows].join("\n"),
