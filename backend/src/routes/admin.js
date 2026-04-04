@@ -287,6 +287,10 @@ router.post("/timesheets/:id/reject", requireAdminOrLead, async (req, res) => {
       .json({ error: "Only submitted timesheets can be rejected" });
 
   const { note } = req.body;
+  if (note && note.length > 1000)
+    return res
+      .status(400)
+      .json({ error: "Rejection note must be 1000 characters or fewer" });
   const rejectClient = await pool.connect();
   try {
     await rejectClient.query("BEGIN");
@@ -566,7 +570,7 @@ router.post("/users", requireAdmin, async (req, res) => {
       targetType: "user",
       targetId: newUser.id,
       targetName: newUser.name,
-      metadata: { email: newUser.email, role: newUser.role },
+      metadata: { role: newUser.role },
     });
     await createClient.query("COMMIT");
   } catch (err) {
