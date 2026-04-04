@@ -2,6 +2,7 @@
 node_modules/
 backend/node_modules/
 frontend/node_modules/
+frontend-next/node_modules/
 
 # Database files
 backend/data/
@@ -15,9 +16,11 @@ logs/
 .env
 backend/.env
 frontend/.env
+frontend-next/.env
 
 # Frontend build output
 frontend/dist/
+frontend-next/.next/
 
 # PM2
 .pm2/
@@ -25,3 +28,6 @@ frontend/dist/
 # macOS
 .DS_Store
 .review-done
+
+# Stray files
+backend/.en
