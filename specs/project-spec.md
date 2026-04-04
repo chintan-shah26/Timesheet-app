@@ -7,11 +7,16 @@
 
 ## Tech Stack
 
-### Frontend (current → target)
+### Frontend
 
-- **Current**: React 19, Vite, React Router DOM v7, Axios, date-fns, Sentry
-- **Target**: Next.js, React, TypeScript, Tailwind CSS, CVA, TanStack Query, React Hook Form, TanStack Table
-- **Migration status**: Spike recorded in ROADMAP.md — feature work continues on current stack
+- Next.js 15, React 19, TypeScript
+- Tailwind CSS 4 (CSS-first config, design tokens in `globals.css`)
+- CVA + clsx (component variants)
+- TanStack Query v5 (server state)
+- React Hook Form v7 (forms)
+- TanStack Table v8 (tabular data)
+- Axios (HTTP client, `withCredentials: true`)
+- date-fns, Sentry
 
 ### Backend
 
@@ -73,12 +78,12 @@ npm install
 npm run dev       # node --watch on http://localhost:3001
 npm start         # production start
 
-# Frontend (from frontend/)
+# Frontend (from frontend-next/)
 npm install
-npm run dev       # Vite dev server on http://localhost:5173
+npm run dev       # Next.js dev server on http://localhost:5174
 npm run build     # production build
+npm run typecheck # tsc --noEmit
 npm run lint      # ESLint
-npm run preview   # preview production build
 ```
 
 ## Directory Structure
@@ -99,12 +104,19 @@ backend/
       auth.js      — /needs-setup, /setup, /login, /me, /logout
       timesheets.js — worker CRUD + submit
       admin.js     — admin approve/reject, billing report, user mgmt
-frontend/
-  src/
-    App.jsx        — AuthContext, BrowserRouter, ProtectedRoute
-    api/client.js  — Axios instance (localhost:3001, withCredentials)
-    pages/         — Login, Setup, Dashboard, WeeklyTimesheet, AdminDashboard, MonthlyReport, ManageUsers
-    components/    — NavBar, DayRow, TimesheetStatusBadge
+frontend-next/src/
+  app/
+    (protected)/   — authenticated pages (NavBar + AuthGate layout)
+    login/         — login page
+    setup/         — first-time setup page
+  api/             — typed API functions (auth.ts, timesheets.ts, admin.ts)
+  components/
+    common/        — Button, Badge, Card, Input, Select, Textarea, Modal, AuthGate
+    layouts/       — NavBar
+    pages/         — page-specific components (DayRow)
+  config/          — Axios instance (api-client.ts)
+  context/         — AuthProvider, useAuth (auth-context.tsx)
+  types/           — all TypeScript types (index.ts)
 ```
 
 ## Data Model
@@ -118,5 +130,5 @@ frontend/
 Active rule files for this project:
 
 - `rules/security-baseline.md` — always active
-- `rules/frontend-conventions.md` — active as migration target (Next.js/TypeScript/Tailwind/CVA/TanStack)
-- `rules/design-tokens.md` — active as migration target
+- `rules/frontend-conventions.md` — active (Next.js/TypeScript/Tailwind/CVA/TanStack)
+- `rules/design-tokens.md` — active
