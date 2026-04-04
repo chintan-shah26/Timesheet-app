@@ -9,40 +9,28 @@ import {
   Users,
   LogOut,
   Clock,
+  type LucideProps,
 } from "lucide-react";
 import clsx from "clsx";
 import { useAuth } from "@/context/auth-context";
+import { getInitials } from "@/lib/initials";
+
+type IconComponent = React.FC<LucideProps>;
 
 interface NavItem {
   href: string;
   label: string;
-  icon: React.ReactNode;
+  icon: IconComponent;
 }
 
 const workerNav: NavItem[] = [
-  {
-    href: "/",
-    label: "My Timesheets",
-    icon: <LayoutDashboard size={16} />,
-  },
+  { href: "/", label: "My Timesheets", icon: LayoutDashboard },
 ];
 
 const adminNav: NavItem[] = [
-  {
-    href: "/admin",
-    label: "Review",
-    icon: <ClipboardCheck size={16} />,
-  },
-  {
-    href: "/admin/reports",
-    label: "Reports",
-    icon: <BarChart2 size={16} />,
-  },
-  {
-    href: "/admin/users",
-    label: "Users",
-    icon: <Users size={16} />,
-  },
+  { href: "/admin", label: "Review", icon: ClipboardCheck },
+  { href: "/admin/reports", label: "Reports", icon: BarChart2 },
+  { href: "/admin/users", label: "Users", icon: Users },
 ];
 
 export default function Sidebar() {
@@ -53,20 +41,13 @@ export default function Sidebar() {
 
   const navItems = user.role === "admin" ? adminNav : workerNav;
 
-  const isActive = (href: string) => {
-    if (href === "/") return pathname === "/";
-    return pathname === href || pathname.startsWith(href + "/");
-  };
+  // Exact match only — prevents /admin highlighting while on /admin/reports
+  const isActive = (href: string) => pathname === href;
 
-  const initials = user.name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = getInitials(user.name);
 
   return (
-    <aside className="flex h-screen w-[220px] shrink-0 flex-col border-r border-border bg-background">
+    <aside className="flex h-screen w-[var(--sidebar-width)] shrink-0 flex-col border-r border-border bg-background">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent">
@@ -86,17 +67,16 @@ export default function Sidebar() {
             className={clsx(
               "flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium transition-colors",
               isActive(item.href)
-                ? "bg-accent-subtle text-accent"
-                : "text-text-secondary hover:bg-surface hover:text-text-primary",
+                ? "border-l-2 border-accent bg-accent-subtle text-accent"
+                : "border-l-2 border-transparent text-text-secondary hover:bg-surface hover:text-text-primary",
             )}
           >
-            <span
-              className={clsx(
-                isActive(item.href) ? "text-accent" : "text-text-disabled",
-              )}
-            >
-              {item.icon}
-            </span>
+            <item.icon
+              size={16}
+              className={
+                isActive(item.href) ? "text-accent" : "text-text-disabled"
+              }
+            />
             {item.label}
           </Link>
         ))}
@@ -112,7 +92,7 @@ export default function Sidebar() {
             {user.name}
           </span>
           <button
-            onClick={logout}
+            onClick={() => void logout()}
             className="text-text-disabled transition-colors hover:text-danger"
             title="Sign out"
           >

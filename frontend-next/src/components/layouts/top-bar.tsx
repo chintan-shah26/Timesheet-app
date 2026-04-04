@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
+import { getInitials } from "@/lib/initials";
 
 const BREADCRUMBS: Record<string, string> = {
   "/": "My Timesheets",
@@ -22,12 +23,7 @@ export default function TopBar() {
 
   if (!user) return null;
 
-  const initials = user.name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = getInitials(user.name);
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-background px-6">
