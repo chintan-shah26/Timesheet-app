@@ -90,7 +90,7 @@ timesheet-app/
     └── src/
         ├── app/
         │   ├── layout.tsx              # Root layout (Server Component)
-        │   ├── (protected)/            # Authenticated pages (NavBar + AuthGate)
+        │   ├── (protected)/            # Authenticated pages (Sidebar + AuthGate)
         │   │   ├── dashboard/          # Worker timesheet list
         │   │   ├── timesheets/[id]/    # Weekly timesheet fill/submit
         │   │   └── admin/
@@ -102,7 +102,7 @@ timesheet-app/
         ├── api/                        # Typed API functions (auth, timesheets, admin)
         ├── components/
         │   ├── common/                 # Button, Badge, Card, Input, Select, Textarea, Modal
-        │   ├── layouts/                # NavBar
+        │   ├── layouts/                # Sidebar, TopBar
         │   ├── pages/                  # Page-specific components (DayRow, etc.)
         │   └── providers.tsx           # QueryClientProvider + AuthProvider wrapper
         ├── config/                     # Axios instance
