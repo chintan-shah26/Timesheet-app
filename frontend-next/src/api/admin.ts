@@ -3,6 +3,7 @@ import type {
   Timesheet,
   TimesheetSummary,
   User,
+  Role,
   MonthlyReport,
   EmployeeMonthlyReport,
 } from "@/types";
@@ -42,13 +43,13 @@ export async function createUser(data: {
   email: string;
   name: string;
   password: string;
-  role: string;
+  role: Role;
 }): Promise<User> {
   const r = await apiClient.post<User>("/api/admin/users", data);
   return r.data;
 }
 
-export async function changeUserRole(id: number, role: string): Promise<void> {
+export async function changeUserRole(id: number, role: Role): Promise<void> {
   await apiClient.patch(`/api/admin/users/${id}/role`, { role });
 }
 
