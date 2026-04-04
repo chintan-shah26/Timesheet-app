@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useReactTable,
@@ -29,6 +29,8 @@ import DayRow, {
 } from "@/components/pages/weekly-timesheet/day-row";
 import type { Timesheet, TimesheetSummary } from "@/types";
 import { FormProvider, useForm } from "react-hook-form";
+import { useAuth } from "@/context/auth-context";
+import { getGreeting, getFirstName } from "@/lib/greeting";
 
 function weekLabel(weekStart: string) {
   const mon = parseISO(weekStart);
@@ -44,8 +46,14 @@ const QUERY_KEYS = {
 };
 
 export default function AdminDashboardPage() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<Tab>("pending");
+  const [greeting, setGreeting] = useState("");
+
+  useEffect(() => {
+    setGreeting(getGreeting());
+  }, []);
   const [filterMonth, setFilterMonth] = useState("");
   const [filterWorker, setFilterWorker] = useState("");
   const [selected, setSelected] = useState<Timesheet | null>(null);
@@ -148,14 +156,26 @@ export default function AdminDashboardPage() {
   return (
     <AuthGate adminOnly>
       <div>
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-text-primary">
-            Timesheets
-          </h1>
-          <p className="mt-0.5 text-sm text-text-secondary">
-            Review and approve submitted timesheets
-          </p>
-        </div>
+        {greeting && (
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold text-text-primary">
+              {greeting}, {getFirstName(user?.name ?? "")}
+            </h1>
+            <p className="mt-0.5 text-sm text-text-secondary">
+              Review and approve submitted timesheets
+            </p>
+          </div>
+        )}
+        {!greeting && (
+          <div className="mb-6">
+            <h1 className="text-2xl font-semibold text-text-primary">
+              Timesheets
+            </h1>
+            <p className="mt-0.5 text-sm text-text-secondary">
+              Review and approve submitted timesheets
+            </p>
+          </div>
+        )}
 
         {/* Tabs + filters */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

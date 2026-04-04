@@ -8,7 +8,6 @@ import {
   BarChart2,
   Users,
   LogOut,
-  Clock,
   type LucideProps,
 } from "lucide-react";
 import clsx from "clsx";
@@ -50,12 +49,58 @@ export default function Sidebar() {
     <aside className="flex h-screen w-[var(--sidebar-width)] shrink-0 flex-col border-r border-border bg-background">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent">
-          <Clock size={14} className="text-white" />
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-label="Rubrik"
+        >
+          <circle cx="12" cy="12" r="11" fill="#009e94" />
+          {/* Snowflake arms */}
+          {[0, 60, 120, 180, 240, 300].map((deg) => {
+            const r = (deg * Math.PI) / 180;
+            const x1 = 12 + 4.5 * Math.cos(r);
+            const y1 = 12 + 4.5 * Math.sin(r);
+            const x2 = 12 + 8.5 * Math.cos(r);
+            const y2 = 12 + 8.5 * Math.sin(r);
+            const cx1 = 12 + 6.5 * Math.cos(r) + 2 * Math.cos(r + Math.PI / 2);
+            const cy1 = 12 + 6.5 * Math.sin(r) + 2 * Math.sin(r + Math.PI / 2);
+            const cx2 = 12 + 6.5 * Math.cos(r) - 2 * Math.cos(r + Math.PI / 2);
+            const cy2 = 12 + 6.5 * Math.sin(r) - 2 * Math.sin(r + Math.PI / 2);
+            return (
+              <g key={deg}>
+                <line
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <line
+                  x1={cx1}
+                  y1={cy1}
+                  x2={cx2}
+                  y2={cy2}
+                  stroke="white"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </g>
+            );
+          })}
+        </svg>
+        <div className="flex items-baseline gap-1">
+          <span className="text-[13px] font-bold text-text-primary">
+            rubrik
+          </span>
+          <span className="text-[11px] text-text-disabled">|</span>
+          <span className="text-[12px] font-medium text-text-secondary">
+            GIPS Timesheet
+          </span>
         </div>
-        <span className="text-[15px] font-semibold text-text-primary">
-          TimeSheet
-        </span>
       </div>
 
       {/* Nav items */}

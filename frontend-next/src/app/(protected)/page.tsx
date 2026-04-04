@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { format, parseISO, addDays, startOfWeek } from "date-fns";
 import { getTimesheets, createTimesheet } from "@/api/timesheets";
+import { getGreeting, getFirstName } from "@/lib/greeting";
 import { useAuth } from "@/context/auth-context";
 import Badge from "@/components/common/badge";
 import Button from "@/components/common/button";
@@ -58,10 +59,15 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const [greeting, setGreeting] = useState("");
 
   useEffect(() => {
     if (user?.role === "admin") router.replace("/admin");
   }, [user, router]);
+
+  useEffect(() => {
+    setGreeting(getGreeting());
+  }, []);
 
   const { data: timesheets = [], isLoading } = useQuery({
     queryKey: QUERY_KEYS.timesheets,
@@ -100,11 +106,22 @@ export default function DashboardPage() {
 
   return (
     <div>
+      {greeting && (
+        <div className="mb-6">
+          <h1 className="text-2xl font-semibold text-text-primary">
+            {greeting}, {getFirstName(user?.name ?? "")}
+          </h1>
+          <p className="mt-0.5 text-sm text-text-secondary">
+            Here&apos;s your timesheet overview
+          </p>
+        </div>
+      )}
+
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-text-primary">
+          <h2 className="text-base font-semibold text-text-primary">
             My Timesheets
-          </h1>
+          </h2>
           <p className="mt-0.5 text-sm text-text-secondary">
             Track your weekly attendance and hours
           </p>
