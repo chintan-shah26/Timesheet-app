@@ -1,7 +1,7 @@
 # Feature Spec: Worker Experience Improvements
 
 **Feature #**: 004
-**Status**: specifying
+**Status**: implemented
 **Date**: 2026-04-04
 
 ## Overview

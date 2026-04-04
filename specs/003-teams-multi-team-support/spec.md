@@ -1,7 +1,7 @@
 # Feature Spec: Teams & Multi-team Support
 
 **Feature #**: 003
-**Status**: specifying
+**Status**: implemented
 **Date**: 2026-04-04
 
 ## Overview

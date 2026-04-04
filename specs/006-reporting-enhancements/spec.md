@@ -1,7 +1,7 @@
 # Feature Spec: Reporting Enhancements
 
 **Feature #**: 006
-**Status**: specifying
+**Status**: implemented
 **Date**: 2026-04-04
 
 ## Overview

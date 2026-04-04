@@ -1,7 +1,7 @@
 # Feature Spec: Sidebar UI Redesign
 
 **Feature #**: 002
-**Status**: specifying
+**Status**: implemented
 **Date**: 2026-04-04
 
 ## Overview

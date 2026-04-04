@@ -1,7 +1,7 @@
 # Feature Spec: Admin & Manager Experience
 
 **Feature #**: 005
-**Status**: specifying
+**Status**: implemented
 **Date**: 2026-04-04
 
 ## Overview
