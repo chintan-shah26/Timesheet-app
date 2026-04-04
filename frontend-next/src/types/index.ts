@@ -19,6 +19,7 @@ export interface TimesheetEntry {
   work_type: WorkType | null;
   notes: string | null;
   timesheet_status?: TimesheetStatus; // present on report entries
+  overtime_hours?: number; // present on GET /timesheets/:id
 }
 
 export interface Timesheet {
@@ -30,6 +31,8 @@ export interface Timesheet {
   submitted_at?: string | null;
   present_days?: number;
   total_hours?: number;
+  total_overtime_hours?: number;
+  overtime_threshold?: number;
   worker_name?: string; // present on admin detail endpoint
   entries: TimesheetEntry[];
 }
@@ -106,6 +109,17 @@ export interface AdminLeaveBalance {
 export interface BulkApproveResult {
   approved: number[];
   failed: number[];
+}
+
+export interface WeeklySummary {
+  week_start: string;
+  total_hours: number;
+  present_days: number;
+  worker_count?: number; // admin only
+}
+
+export interface AppSettings {
+  overtime_threshold_hours: string;
 }
 
 // Monthly report — single employee

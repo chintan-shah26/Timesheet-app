@@ -4,6 +4,7 @@ import type {
   TimesheetEntry,
   TimesheetSummary,
   LeaveBalance,
+  WeeklySummary,
 } from "@/types";
 
 export async function getTimesheets(): Promise<TimesheetSummary[]> {
@@ -54,4 +55,16 @@ export async function getLeaveBalance(year: number): Promise<LeaveBalance> {
     params: { year },
   });
   return r.data;
+}
+
+export async function getWeeklySummary(weeks = 8): Promise<WeeklySummary[]> {
+  const r = await apiClient.get<WeeklySummary[]>(
+    "/api/timesheets/weekly-summary",
+    { params: { weeks } },
+  );
+  return r.data;
+}
+
+export function getTimesheetPdfUrl(id: number): string {
+  return `${apiClient.defaults.baseURL}/api/timesheets/${id}/export/pdf`;
 }
