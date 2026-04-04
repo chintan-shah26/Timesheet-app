@@ -120,6 +120,29 @@ initSchema()
     app.listen(PORT, () =>
       console.log(`Backend running on http://localhost:${PORT}`),
     );
+
+    // Register reminder cron job
+    if (process.env.REMINDER_ENABLED !== "false") {
+      const cron = require("node-cron");
+      const { sendReminderEmails } = require("./jobs/reminder");
+      const schedule = process.env.REMINDER_CRON || "0 17 * * 5";
+      if (!cron.validate(schedule)) {
+        console.error(
+          `[reminder] Invalid REMINDER_CRON expression: ${schedule}`,
+        );
+      } else {
+        cron.schedule(schedule, () => {
+          console.log("[reminder] Running scheduled reminder job");
+          sendReminderEmails().catch((err) => {
+            console.error("[reminder] Job failed:", err);
+            Sentry.captureException(err);
+          });
+        });
+        console.log(`[reminder] Reminder job scheduled: ${schedule}`);
+      }
+    } else {
+      console.log("[reminder] Reminders disabled (REMINDER_ENABLED=false)");
+    }
   })
   .catch((err) => {
     console.error("Failed to initialize database:", err);

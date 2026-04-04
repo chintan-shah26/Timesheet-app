@@ -10,6 +10,7 @@ import type {
   AdminLeaveBalance,
   Team,
   TeamDetail,
+  BulkApproveResult,
 } from "@/types";
 
 // Timesheets
@@ -36,6 +37,16 @@ export async function approveTimesheet(id: number): Promise<void> {
 
 export async function rejectTimesheet(id: number, note: string): Promise<void> {
   await apiClient.post(`/api/admin/timesheets/${id}/reject`, { note });
+}
+
+export async function bulkApproveTimesheets(
+  ids: number[],
+): Promise<BulkApproveResult> {
+  const r = await apiClient.post<BulkApproveResult>(
+    "/api/admin/timesheets/bulk-approve",
+    { ids },
+  );
+  return r.data;
 }
 
 // Users

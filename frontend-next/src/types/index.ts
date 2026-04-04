@@ -103,6 +103,11 @@ export interface AdminLeaveBalance {
   used_days: number;
 }
 
+export interface BulkApproveResult {
+  approved: number[];
+  failed: number[];
+}
+
 // Monthly report — single employee
 export interface EmployeeReportSummary {
   total_present_days: number;

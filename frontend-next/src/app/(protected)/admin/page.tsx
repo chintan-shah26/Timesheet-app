@@ -14,6 +14,7 @@ import {
   getAdminTimesheet,
   approveTimesheet,
   rejectTimesheet,
+  bulkApproveTimesheets,
   getUsers,
   getTeams,
 } from "@/api/admin";
@@ -56,12 +57,17 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     setGreeting(getGreeting());
   }, []);
+
   const [filterMonth, setFilterMonth] = useState("");
   const [filterWorker, setFilterWorker] = useState("");
   const [filterTeam, setFilterTeam] = useState("");
   const [selected, setSelected] = useState<Timesheet | null>(null);
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
+
+  // Bulk approve state
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
   const { data: workers = [] } = useQuery({
     queryKey: QUERY_KEYS.workers,
@@ -83,6 +89,11 @@ export default function AdminDashboardPage() {
         team_id: filterTeam || undefined,
       }),
   });
+
+  // Clear selection when tab/filters change
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [tab, filterMonth, filterWorker, filterTeam]);
 
   const openSheet = async (t: TimesheetSummary) => {
     try {
@@ -119,6 +130,21 @@ export default function AdminDashboardPage() {
     onError: () => alert("Reject failed. Please try again."),
   });
 
+  const bulkApproveMutation = useMutation({
+    mutationFn: (ids: number[]) => bulkApproveTimesheets(ids),
+    onSuccess: (result) => {
+      void invalidate();
+      setBulkConfirmOpen(false);
+      setSelectedIds(new Set());
+      const msg =
+        result.failed.length === 0
+          ? `${result.approved.length} timesheet${result.approved.length !== 1 ? "s" : ""} approved.`
+          : `${result.approved.length} approved, ${result.failed.length} failed.`;
+      alert(msg);
+    },
+    onError: () => alert("Bulk approve failed. Please try again."),
+  });
+
   // Read-only form provider for DayRow in the modal
   const readOnlyMethods = useForm<WeeklyTimesheetForm>({
     defaultValues: { entries: selected?.entries ?? [] },
@@ -127,7 +153,56 @@ export default function AdminDashboardPage() {
 
   const workerOptions = workers.filter((u) => u.role === "worker");
 
+  // Only submitted timesheets are selectable for bulk approve
+  const selectableIds = timesheets
+    .filter((t) => t.status === "submitted")
+    .map((t) => t.id);
+  const allSelected =
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedIds.has(id));
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(selectableIds));
+    }
+  };
+
+  const toggleOne = (id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const columns: ColumnDef<TimesheetSummary>[] = [
+    {
+      id: "select",
+      header: () =>
+        selectableIds.length > 0 ? (
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={toggleAll}
+            className="h-3.5 w-3.5 accent-accent"
+            aria-label="Select all"
+          />
+        ) : null,
+      cell: ({ row }) =>
+        row.original.status === "submitted" ? (
+          <input
+            type="checkbox"
+            checked={selectedIds.has(row.original.id)}
+            onChange={() => toggleOne(row.original.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-3.5 w-3.5 accent-accent"
+            aria-label="Select row"
+          />
+        ) : null,
+    },
     { accessorKey: "worker_name", header: "Worker" },
     {
       accessorKey: "week_start",
@@ -251,6 +326,30 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
+        {/* Bulk action toolbar */}
+        {selectedIds.size > 0 && (
+          <div className="mb-3 flex items-center gap-3 rounded-md border border-accent/30 bg-accent-subtle px-4 py-2.5">
+            <span className="text-sm font-medium text-accent">
+              {selectedIds.size} selected
+            </span>
+            <Button
+              size="sm"
+              variant="success"
+              onClick={() => setBulkConfirmOpen(true)}
+            >
+              Approve {selectedIds.size} timesheet
+              {selectedIds.size !== 1 ? "s" : ""}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Deselect all
+            </Button>
+          </div>
+        )}
+
         <Card overflow>
           {isLoading ? (
             <div className="p-8 text-center text-sm text-text-secondary">
@@ -302,6 +401,38 @@ export default function AdminDashboardPage() {
             </table>
           )}
         </Card>
+
+        {/* Bulk approve confirmation modal */}
+        {bulkConfirmOpen && (
+          <Modal onClose={() => setBulkConfirmOpen(false)}>
+            <h2 className="mb-2 text-base font-semibold text-text-primary">
+              Approve {selectedIds.size} timesheet
+              {selectedIds.size !== 1 ? "s" : ""}?
+            </h2>
+            <p className="mb-5 text-sm text-text-secondary">
+              This will approve all {selectedIds.size} selected timesheet
+              {selectedIds.size !== 1 ? "s" : ""}. This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="success"
+                onClick={() =>
+                  bulkApproveMutation.mutate(Array.from(selectedIds))
+                }
+                disabled={bulkApproveMutation.isPending}
+              >
+                {bulkApproveMutation.isPending ? "Approving…" : "Confirm"}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setBulkConfirmOpen(false)}
+                disabled={bulkApproveMutation.isPending}
+              >
+                Cancel
+              </Button>
+            </div>
+          </Modal>
+        )}
 
         {/* Sheet detail modal */}
         {selected && (
