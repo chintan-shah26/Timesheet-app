@@ -115,8 +115,13 @@ router.post(
   requireAdminOrLead,
   async (req, res) => {
     const { ids } = req.body;
+    const MAX_BULK = 100;
     if (!Array.isArray(ids) || ids.length === 0)
       return res.status(400).json({ error: "ids must be a non-empty array" });
+    if (ids.length > MAX_BULK)
+      return res.status(400).json({
+        error: `Cannot bulk approve more than ${MAX_BULK} timesheets at once`,
+      });
 
     const approved = [];
     const failed = [];
@@ -159,9 +164,9 @@ router.post(
           }
         }
 
-        // Already approved/rejected — count as approved (skip silently)
+        // Not submitted (already approved/rejected/draft) — skip, report as failed
         if (sheet.status !== "submitted") {
-          approved.push(id);
+          failed.push(id);
           await client.query("ROLLBACK");
           continue;
         }

@@ -14,6 +14,15 @@ function createTransport() {
   });
 }
 
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
+
 // Returns yyyy-MM-dd for the most recent Monday on or before today (UTC)
 function currentWeekStart() {
   const now = new Date();
@@ -57,35 +66,40 @@ async function sendReminderEmails() {
 
   const weekLabel = `${weekStart} – ${weekEnd}`;
 
-  for (const worker of result.rows) {
-    const link = worker.timesheet_id
-      ? `${frontendUrl}/timesheets/${worker.timesheet_id}`
-      : frontendUrl;
+  try {
+    for (const worker of result.rows) {
+      const link = worker.timesheet_id
+        ? `${frontendUrl}/timesheets/${worker.timesheet_id}`
+        : frontendUrl;
 
-    const html = `
-      <p>Hi ${worker.name},</p>
+      const safeName = escapeHtml(worker.name);
+      const html = `
+      <p>Hi ${safeName},</p>
       <p>Your timesheet for the week of <strong>${weekLabel}</strong> hasn't been submitted yet.</p>
       <p>Please <a href="${link}">log in and submit it</a> as soon as possible.</p>
       <p>Thanks,<br>GIPS Timesheet</p>
     `;
-    const text = `Hi ${worker.name},\n\nYour timesheet for the week of ${weekLabel} hasn't been submitted yet.\nPlease log in and submit it: ${link}\n\nThanks,\nGIPS Timesheet`;
+      const text = `Hi ${worker.name.replace(/[\r\n]/g, " ")},\n\nYour timesheet for the week of ${weekLabel} hasn't been submitted yet.\nPlease log in and submit it: ${link}\n\nThanks,\nGIPS Timesheet`;
 
-    try {
-      await transport.sendMail({
-        from,
-        to: worker.email,
-        subject: `Reminder: submit your timesheet for ${weekLabel}`,
-        text,
-        html,
-      });
-      console.log(`[reminder] Sent to ${worker.email}`);
-    } catch (err) {
-      console.error(
-        `[reminder] Failed to send to ${worker.email}:`,
-        err.message,
-      );
-      Sentry.captureException(err, { extra: { worker_id: worker.id } });
+      try {
+        await transport.sendMail({
+          from,
+          to: worker.email,
+          subject: `Reminder: submit your timesheet for ${weekLabel}`,
+          text,
+          html,
+        });
+        console.log(`[reminder] Sent to ${worker.email}`);
+      } catch (err) {
+        console.error(
+          `[reminder] Failed to send to ${worker.email}:`,
+          err.message,
+        );
+        Sentry.captureException(err, { extra: { worker_id: worker.id } });
+      }
     }
+  } finally {
+    transport.close();
   }
 }
 
