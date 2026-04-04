@@ -11,9 +11,28 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// List all timesheets (filterable by status, worker, month)
-router.get("/timesheets", requireAdmin, async (req, res) => {
-  const { status, user_id, month } = req.query;
+function requireAdminOrLead(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: "Not authenticated" });
+  if (!["admin", "team_lead"].includes(req.user.role))
+    return res.status(403).json({ error: "Admin or team lead only" });
+  next();
+}
+
+// Resolve the team_id that should be used to scope a team_lead's queries.
+// Returns the team_id (number) if the caller is a team_lead, null otherwise.
+async function getLeadTeamId(user) {
+  if (user.role !== "team_lead") return null;
+  const result = await pool.query(
+    "SELECT team_id FROM team_members WHERE user_id = $1 AND is_lead = TRUE",
+    [user.id],
+  );
+  return result.rows[0]?.team_id ?? null;
+}
+
+// List all timesheets (filterable by status, worker, month, team)
+// team_lead role: automatically scoped to their team
+router.get("/timesheets", requireAdminOrLead, async (req, res) => {
+  const { status, user_id, month, team_id } = req.query;
   const params = [];
   const conditions = ["1=1"];
 
@@ -28,6 +47,16 @@ router.get("/timesheets", requireAdmin, async (req, res) => {
   if (month) {
     params.push(month);
     conditions.push(`TO_CHAR(t.week_start, 'YYYY-MM') = $${params.length}`);
+  }
+
+  // team_lead: implicit team scope; admin: optional explicit team_id filter
+  const leadTeamId = await getLeadTeamId(req.user);
+  const effectiveTeamId = leadTeamId ?? (team_id ? Number(team_id) : null);
+  if (effectiveTeamId) {
+    params.push(effectiveTeamId);
+    conditions.push(
+      `t.user_id IN (SELECT user_id FROM team_members WHERE team_id = $${params.length})`,
+    );
   }
 
   const result = await pool.query(
@@ -45,8 +74,8 @@ router.get("/timesheets", requireAdmin, async (req, res) => {
   res.json(result.rows);
 });
 
-// Get single timesheet with entries (admin view)
-router.get("/timesheets/:id", requireAdmin, async (req, res) => {
+// Get single timesheet with entries (admin/team_lead view)
+router.get("/timesheets/:id", requireAdminOrLead, async (req, res) => {
   const sheetResult = await pool.query(
     `
     SELECT t.*, u.name AS worker_name, u.email AS worker_email
@@ -58,6 +87,17 @@ router.get("/timesheets/:id", requireAdmin, async (req, res) => {
   const sheet = sheetResult.rows[0];
   if (!sheet) return res.status(404).json({ error: "Not found" });
 
+  // team_lead: verify the timesheet belongs to their team
+  const leadTeamId = await getLeadTeamId(req.user);
+  if (leadTeamId) {
+    const memberCheck = await pool.query(
+      "SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2",
+      [leadTeamId, sheet.user_id],
+    );
+    if (!memberCheck.rows[0])
+      return res.status(403).json({ error: "Access denied" });
+  }
+
   const entries = await pool.query(
     "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",
     [sheet.id],
@@ -66,7 +106,7 @@ router.get("/timesheets/:id", requireAdmin, async (req, res) => {
 });
 
 // Approve timesheet
-router.post("/timesheets/:id/approve", requireAdmin, async (req, res) => {
+router.post("/timesheets/:id/approve", requireAdminOrLead, async (req, res) => {
   const sheetResult = await pool.query(
     "SELECT * FROM timesheets WHERE id = $1",
     [req.params.id],
@@ -86,7 +126,7 @@ router.post("/timesheets/:id/approve", requireAdmin, async (req, res) => {
 });
 
 // Reject timesheet
-router.post("/timesheets/:id/reject", requireAdmin, async (req, res) => {
+router.post("/timesheets/:id/reject", requireAdminOrLead, async (req, res) => {
   const sheetResult = await pool.query(
     "SELECT * FROM timesheets WHERE id = $1",
     [req.params.id],
@@ -270,15 +310,20 @@ router.get("/reports/monthly/export", requireAdmin, async (req, res) => {
   res.end();
 });
 
-// Monthly billing report
+// Monthly billing report (filterable by team_id)
 router.get("/reports/monthly", requireAdmin, async (req, res) => {
-  const { month } = req.query;
+  const { month, team_id } = req.query;
   if (!month)
     return res
       .status(400)
       .json({ error: "month query param required (YYYY-MM)" });
   if (!/^\d{4}-\d{2}$/.test(month))
     return res.status(400).json({ error: "month must be in YYYY-MM format" });
+
+  const params = [month];
+  const teamFilter = team_id
+    ? `AND u.id IN (SELECT user_id FROM team_members WHERE team_id = $${params.push(Number(team_id)) && params.length})`
+    : "";
 
   const result = await pool.query(
     `
@@ -292,11 +337,11 @@ router.get("/reports/monthly", requireAdmin, async (req, res) => {
       AND t.status = 'approved'
       AND TO_CHAR(t.week_start, 'YYYY-MM') = $1
     LEFT JOIN timesheet_entries e ON e.timesheet_id = t.id
-    WHERE u.role = 'worker'
+    WHERE u.role = 'worker' ${teamFilter}
     GROUP BY u.id
     ORDER BY u.name
   `,
-    [month],
+    params,
   );
 
   res.json({ month, workers: result.rows });

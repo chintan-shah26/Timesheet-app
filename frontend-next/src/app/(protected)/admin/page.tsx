@@ -15,6 +15,7 @@ import {
   approveTimesheet,
   rejectTimesheet,
   getUsers,
+  getTeams,
 } from "@/api/admin";
 import AuthGate from "@/components/common/auth-gate";
 import Badge from "@/components/common/badge";
@@ -40,9 +41,10 @@ function weekLabel(weekStart: string) {
 type Tab = "pending" | "all";
 
 const QUERY_KEYS = {
-  timesheets: (tab: Tab, month: string, worker: string) =>
-    ["admin-timesheets", tab, month, worker] as const,
+  timesheets: (tab: Tab, month: string, worker: string, team: string) =>
+    ["admin-timesheets", tab, month, worker, team] as const,
   workers: ["admin-workers"] as const,
+  teams: ["admin-teams"] as const,
 };
 
 export default function AdminDashboardPage() {
@@ -56,6 +58,7 @@ export default function AdminDashboardPage() {
   }, []);
   const [filterMonth, setFilterMonth] = useState("");
   const [filterWorker, setFilterWorker] = useState("");
+  const [filterTeam, setFilterTeam] = useState("");
   const [selected, setSelected] = useState<Timesheet | null>(null);
   const [rejectMode, setRejectMode] = useState(false);
   const [rejectNote, setRejectNote] = useState("");
@@ -65,13 +68,19 @@ export default function AdminDashboardPage() {
     queryFn: getUsers,
   });
 
+  const { data: teams = [] } = useQuery({
+    queryKey: QUERY_KEYS.teams,
+    queryFn: getTeams,
+  });
+
   const { data: timesheets = [], isLoading } = useQuery({
-    queryKey: QUERY_KEYS.timesheets(tab, filterMonth, filterWorker),
+    queryKey: QUERY_KEYS.timesheets(tab, filterMonth, filterWorker, filterTeam),
     queryFn: () =>
       getAdminTimesheets({
         status: tab === "pending" ? "submitted" : undefined,
         month: filterMonth || undefined,
         user_id: filterWorker || undefined,
+        team_id: filterTeam || undefined,
       }),
   });
 
@@ -203,6 +212,18 @@ export default function AdminDashboardPage() {
               className="w-auto"
             />
             <Select
+              value={filterTeam}
+              onChange={(e) => setFilterTeam(e.target.value)}
+              className="min-w-[140px]"
+            >
+              <option value="">All teams</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </Select>
+            <Select
               value={filterWorker}
               onChange={(e) => setFilterWorker(e.target.value)}
               className="min-w-[160px]"
@@ -214,13 +235,14 @@ export default function AdminDashboardPage() {
                 </option>
               ))}
             </Select>
-            {(filterMonth || filterWorker) && (
+            {(filterMonth || filterWorker || filterTeam) && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => {
                   setFilterMonth("");
                   setFilterWorker("");
+                  setFilterTeam("");
                 }}
               >
                 Clear

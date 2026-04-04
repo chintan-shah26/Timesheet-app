@@ -1,7 +1,8 @@
-const { Pool } = require('pg');
+const { Pool } = require("pg");
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://localhost/timesheet_db',
+  connectionString:
+    process.env.DATABASE_URL || "postgresql://localhost/timesheet_db",
 });
 
 async function initSchema() {
@@ -36,6 +37,21 @@ async function initSchema() {
       work_type    TEXT,
       notes        TEXT,
       UNIQUE(timesheet_id, date)
+    );
+
+    CREATE TABLE IF NOT EXISTS teams (
+      id          SERIAL PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS team_members (
+      team_id   INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      is_lead   BOOLEAN NOT NULL DEFAULT FALSE,
+      joined_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(user_id)
     );
   `);
 }

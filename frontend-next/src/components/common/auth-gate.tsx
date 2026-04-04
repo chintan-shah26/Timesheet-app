@@ -26,7 +26,7 @@ export default function AuthGate({
       router.replace(needsSetup ? "/setup" : "/login");
       return;
     }
-    if (adminOnly && user.role !== "admin") {
+    if (adminOnly && user.role !== "admin" && user.role !== "team_lead") {
       router.replace("/");
     }
   }, [user, loading, needsSetup, adminOnly, router]);
@@ -40,7 +40,8 @@ export default function AuthGate({
   }
 
   if (!user) return null;
-  if (adminOnly && user.role !== "admin") return null;
+  if (adminOnly && user.role !== "admin" && user.role !== "team_lead")
+    return null;
 
   return <>{children}</>;
 }

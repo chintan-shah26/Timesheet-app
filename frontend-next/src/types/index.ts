@@ -1,4 +1,4 @@
-export type Role = "worker" | "admin";
+export type Role = "worker" | "team_lead" | "admin";
 
 export type WorkType = "Remote" | "On-site" | "Leave" | "Holiday";
 
@@ -43,6 +43,27 @@ export interface TimesheetSummary {
   present_days: number;
   total_hours: number;
   submitted_at: string | null;
+}
+
+export interface Team {
+  id: number;
+  name: string;
+  description: string | null;
+  created_at: string;
+  member_count?: number;
+}
+
+export interface TeamMember {
+  id: number;
+  name: string;
+  email: string;
+  role: Role;
+  is_lead: boolean;
+  joined_at: string;
+}
+
+export interface TeamDetail extends Team {
+  members: TeamMember[];
 }
 
 // Monthly report — all workers

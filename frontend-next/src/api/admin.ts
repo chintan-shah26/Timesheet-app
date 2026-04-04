@@ -6,6 +6,8 @@ import type {
   Role,
   MonthlyReport,
   EmployeeMonthlyReport,
+  Team,
+  TeamDetail,
 } from "@/types";
 
 // Timesheets
@@ -13,6 +15,7 @@ export async function getAdminTimesheets(params: {
   status?: string;
   month?: string;
   user_id?: string;
+  team_id?: string;
 }): Promise<TimesheetSummary[]> {
   const r = await apiClient.get<TimesheetSummary[]>("/api/admin/timesheets", {
     params,
@@ -64,10 +67,72 @@ export async function deleteUser(id: number): Promise<void> {
   await apiClient.delete(`/api/admin/users/${id}`);
 }
 
+// Teams
+export async function getTeams(): Promise<Team[]> {
+  const r = await apiClient.get<Team[]>("/api/admin/teams");
+  return r.data;
+}
+
+export async function getTeam(id: number): Promise<TeamDetail> {
+  const r = await apiClient.get<TeamDetail>(`/api/admin/teams/${id}`);
+  return r.data;
+}
+
+export async function createTeam(data: {
+  name: string;
+  description?: string;
+}): Promise<Team> {
+  const r = await apiClient.post<Team>("/api/admin/teams", data);
+  return r.data;
+}
+
+export async function updateTeam(
+  id: number,
+  data: { name: string; description?: string },
+): Promise<Team> {
+  const r = await apiClient.put<Team>(`/api/admin/teams/${id}`, data);
+  return r.data;
+}
+
+export async function deleteTeam(id: number): Promise<void> {
+  await apiClient.delete(`/api/admin/teams/${id}`);
+}
+
+export async function addTeamMember(
+  teamId: number,
+  userId: number,
+  isLead = false,
+): Promise<void> {
+  await apiClient.post(`/api/admin/teams/${teamId}/members`, {
+    user_id: userId,
+    is_lead: isLead,
+  });
+}
+
+export async function removeTeamMember(
+  teamId: number,
+  userId: number,
+): Promise<void> {
+  await apiClient.delete(`/api/admin/teams/${teamId}/members/${userId}`);
+}
+
+export async function updateTeamMemberLead(
+  teamId: number,
+  userId: number,
+  isLead: boolean,
+): Promise<void> {
+  await apiClient.patch(`/api/admin/teams/${teamId}/members/${userId}`, {
+    is_lead: isLead,
+  });
+}
+
 // Reports
-export async function getMonthlyReport(month: string): Promise<MonthlyReport> {
+export async function getMonthlyReport(
+  month: string,
+  teamId?: string,
+): Promise<MonthlyReport> {
   const r = await apiClient.get<MonthlyReport>("/api/admin/reports/monthly", {
-    params: { month },
+    params: { month, ...(teamId ? { team_id: teamId } : {}) },
   });
   return r.data;
 }
