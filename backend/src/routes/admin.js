@@ -450,7 +450,10 @@ router.get("/reports/monthly", requireAdmin, async (req, res) => {
   const thresholdResult = await pool.query(
     "SELECT value FROM app_settings WHERE key = 'overtime_threshold_hours'",
   );
-  const threshold = parseFloat(thresholdResult.rows[0]?.value ?? "8");
+  const threshold = Math.min(
+    24,
+    Math.max(0, parseFloat(thresholdResult.rows[0]?.value ?? "8") || 8),
+  );
 
   const result = await pool.query(
     `
@@ -736,7 +739,7 @@ router.patch("/settings", requireAdmin, async (req, res) => {
 
 // Weekly summary (admin) — last N weeks of aggregate hours + presence rate
 router.get("/reports/weekly-summary", requireAdminOrLead, async (req, res) => {
-  const weeks = Math.min(Number(req.query.weeks) || 8, 52);
+  const weeks = Math.max(1, Math.min(Number(req.query.weeks) || 8, 52));
   const { team_id } = req.query;
 
   const params = [weeks];
@@ -801,7 +804,10 @@ router.get(
     const thresholdResult = await pool.query(
       "SELECT value FROM app_settings WHERE key = 'overtime_threshold_hours'",
     );
-    const threshold = parseFloat(thresholdResult.rows[0]?.value ?? "8");
+    const threshold = Math.min(
+      24,
+      Math.max(0, parseFloat(thresholdResult.rows[0]?.value ?? "8") || 8),
+    );
 
     streamTimesheetPdf(res, sheet, entries.rows, threshold);
   },

@@ -28,7 +28,7 @@ export default function AdminSettingsPage() {
   }, [settings]);
 
   const displayThreshold =
-    threshold || settings?.overtime_threshold_hours || "8";
+    threshold !== "" ? threshold : (settings?.overtime_threshold_hours ?? "8");
 
   const updateMutation = useMutation({
     mutationFn: () =>

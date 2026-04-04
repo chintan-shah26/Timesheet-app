@@ -77,6 +77,7 @@ export interface WorkerMonthSummary {
   timesheet_count: number;
   total_present_days: number;
   total_hours: number;
+  overtime_hours: number;
 }
 
 export interface MonthlyReport {

@@ -42,7 +42,7 @@ router.get("/", requireAuth, async (req, res) => {
 // Weekly summary for the authenticated worker (last N weeks)
 // MUST be registered before GET /:id to avoid route shadowing
 router.get("/weekly-summary", requireAuth, async (req, res) => {
-  const weeks = Math.min(Number(req.query.weeks) || 8, 52);
+  const weeks = Math.max(1, Math.min(Number(req.query.weeks) || 8, 52));
   const result = await pool.query(
     `
     SELECT
@@ -117,7 +117,10 @@ router.get("/:id/export/pdf", requireAuth, async (req, res) => {
   const thresholdResult = await pool.query(
     "SELECT value FROM app_settings WHERE key = 'overtime_threshold_hours'",
   );
-  const threshold = parseFloat(thresholdResult.rows[0]?.value ?? "8");
+  const threshold = Math.min(
+    24,
+    Math.max(0, parseFloat(thresholdResult.rows[0]?.value ?? "8") || 8),
+  );
 
   streamTimesheetPdf(res, sheet, entries.rows, threshold);
 });
@@ -130,7 +133,10 @@ router.get("/:id", requireAuth, async (req, res) => {
   const thresholdResult = await pool.query(
     "SELECT value FROM app_settings WHERE key = 'overtime_threshold_hours'",
   );
-  const threshold = parseFloat(thresholdResult.rows[0]?.value ?? "8");
+  const threshold = Math.min(
+    24,
+    Math.max(0, parseFloat(thresholdResult.rows[0]?.value ?? "8") || 8),
+  );
 
   const entries = await pool.query(
     "SELECT * FROM timesheet_entries WHERE timesheet_id = $1 ORDER BY date",

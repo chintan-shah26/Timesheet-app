@@ -1,15 +1,30 @@
 const PDFDocument = require("pdfkit");
 
+// Strip control characters and truncate to prevent PDF layout injection via user content
+function sanitizePdfText(s) {
+  return String(s ?? "")
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")
+    .substring(0, 200);
+}
+
 function streamTimesheetPdf(res, sheet, entries, threshold) {
   const doc = new PDFDocument({ margin: 50, size: "A4" });
   res.setHeader("Content-Type", "application/pdf");
   const safeName = (sheet.worker_name || "timesheet")
     .replace(/[^\w\s-]/g, "")
     .replace(/\s+/g, "-");
+  const safeWeekStart = String(sheet.week_start).replace(/[^\d-]/g, "");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="timesheet-${safeName}-${sheet.week_start}.pdf"`,
+    `attachment; filename="timesheet-${safeName}-${safeWeekStart}.pdf"`,
   );
+  doc.on("error", (err) => {
+    if (!res.headersSent) {
+      res.status(500).json({ error: "PDF generation failed" });
+    } else {
+      res.destroy(err);
+    }
+  });
   doc.pipe(res);
 
   // Title
@@ -84,7 +99,7 @@ function streamTimesheetPdf(res, sheet, entries, threshold) {
       e.is_present && e.hours ? `${hours}h` : "—",
       e.work_type || "—",
       ot > 0 ? `${ot.toFixed(1)}h` : "—",
-      e.notes || "",
+      sanitizePdfText(e.notes),
     ];
     row.forEach((v, i) => {
       doc.text(String(v), x, y, { width: cols[i] });
@@ -105,7 +120,10 @@ function streamTimesheetPdf(res, sheet, entries, threshold) {
 
   if (sheet.admin_note) {
     doc.moveDown();
-    doc.font("Helvetica").fontSize(9).text(`Admin note: ${sheet.admin_note}`);
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .text(`Admin note: ${sanitizePdfText(sheet.admin_note)}`);
   }
 
   doc.end();
