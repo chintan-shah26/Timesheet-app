@@ -556,13 +556,14 @@ router.post("/users", requireAdmin, async (req, res) => {
 
   const hash = await hashPassword(password);
   const createClient = await pool.connect();
+  let newUser;
   try {
     await createClient.query("BEGIN");
     const result = await createClient.query(
       "INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, email, name, role",
       [email.toLowerCase().trim(), name, hash, role],
     );
-    const newUser = result.rows[0];
+    newUser = result.rows[0];
     await logAction(createClient, {
       actorId: req.user.id,
       actorName: req.user.name,
