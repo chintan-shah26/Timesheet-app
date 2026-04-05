@@ -18,6 +18,13 @@ export default function Modal({ children, onClose, wide }: ModalProps) {
         className={`relative w-full rounded-lg bg-surface p-6 shadow-md ${wide ? "max-w-2xl" : "max-w-md"}`}
         onClick={(e) => e.stopPropagation()}
       >
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 text-text-disabled hover:text-text-primary"
+          aria-label="Close"
+        >
+          ✕
+        </button>
         {children}
       </div>
     </div>
