@@ -29,8 +29,9 @@ export async function createTimesheet(
 export async function saveEntries(
   id: number,
   entries: TimesheetEntry[],
+  notes?: string | null,
 ): Promise<void> {
-  await apiClient.put(`/api/timesheets/${id}/entries`, { entries });
+  await apiClient.put(`/api/timesheets/${id}/entries`, { entries, notes });
 }
 
 export async function submitTimesheet(id: number): Promise<void> {

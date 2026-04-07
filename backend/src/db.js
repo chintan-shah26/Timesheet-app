@@ -94,6 +94,11 @@ async function initSchema() {
     CREATE INDEX IF NOT EXISTS audit_logs_created_at_idx ON audit_logs (created_at DESC);
   `);
 
+  // Additive migrations — safe to re-run
+  await pool.query(`
+    ALTER TABLE timesheets ADD COLUMN IF NOT EXISTS notes TEXT;
+  `);
+
   // Seed default settings (idempotent)
   await pool.query(`
     INSERT INTO app_settings (key, value)

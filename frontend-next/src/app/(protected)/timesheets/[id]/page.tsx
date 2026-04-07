@@ -50,10 +50,10 @@ export default function WeeklyTimesheetPage() {
   });
 
   const methods = useForm<WeeklyTimesheetForm>({
-    defaultValues: { entries: [] },
+    defaultValues: { entries: [], notes: "" },
   });
 
-  const { reset, control, getValues } = methods;
+  const { reset, control, getValues, register } = methods;
 
   useEffect(() => {
     if (!sheet) return;
@@ -62,6 +62,7 @@ export default function WeeklyTimesheetPage() {
         sheet.entries.length > 0
           ? sheet.entries
           : buildDefaultEntries(sheet.week_start),
+      notes: sheet.notes ?? "",
     });
   }, [sheet, reset]);
 
@@ -69,7 +70,8 @@ export default function WeeklyTimesheetPage() {
   const readOnly = sheet?.status !== "draft";
 
   const saveMutation = useMutation({
-    mutationFn: () => saveEntries(Number(id), getValues("entries")),
+    mutationFn: () =>
+      saveEntries(Number(id), getValues("entries"), getValues("notes")),
     onSuccess: () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -79,7 +81,7 @@ export default function WeeklyTimesheetPage() {
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      await saveEntries(Number(id), getValues("entries"));
+      await saveEntries(Number(id), getValues("entries"), getValues("notes"));
       await submitTimesheet(Number(id));
     },
     onSuccess: () => {
@@ -202,6 +204,20 @@ export default function WeeklyTimesheetPage() {
             </div>
           ))}
         </Card>
+
+        {/* Week notes */}
+        <div className="mb-4">
+          <label className="mb-1.5 block text-xs font-medium text-text-secondary">
+            Week notes{" "}
+            <span className="font-normal text-text-disabled">(optional)</span>
+          </label>
+          <Textarea
+            rows={3}
+            placeholder="e.g. Was on client site all week"
+            disabled={readOnly}
+            {...register("notes")}
+          />
+        </div>
 
         {/* Recall button (submitted/rejected) */}
         {(sheet.status === "submitted" || sheet.status === "rejected") && (

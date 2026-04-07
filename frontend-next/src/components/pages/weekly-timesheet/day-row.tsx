@@ -21,6 +21,7 @@ interface DayRowProps {
 
 export interface WeeklyTimesheetForm {
   entries: TimesheetEntry[];
+  notes: string;
 }
 
 export default function DayRow({ index, readOnly = false }: DayRowProps) {

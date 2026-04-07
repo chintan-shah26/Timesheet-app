@@ -168,8 +168,8 @@ export default function AdminDashboardPage() {
 
   // Read-only form provider for DayRow in the modal
   const readOnlyMethods = useForm<WeeklyTimesheetForm>({
-    defaultValues: { entries: selected?.entries ?? [] },
-    values: { entries: selected?.entries ?? [] },
+    defaultValues: { entries: selected?.entries ?? [], notes: "" },
+    values: { entries: selected?.entries ?? [], notes: selected?.notes ?? "" },
   });
 
   const workerOptions = workers.filter((u) => u.role === "worker");
@@ -536,6 +536,15 @@ export default function AdminDashboardPage() {
                 ))}
               </FormProvider>
             </Card>
+
+            {selected.notes && (
+              <div className="mb-4 rounded-md border border-border bg-surface px-4 py-3">
+                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-text-secondary">
+                  Worker notes
+                </p>
+                <p className="text-sm text-text-primary">{selected.notes}</p>
+              </div>
+            )}
 
             <div className="mb-3">
               <a

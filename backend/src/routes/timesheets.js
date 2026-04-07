@@ -222,7 +222,7 @@ router.put("/:id/entries", requireAuth, async (req, res) => {
       .status(400)
       .json({ error: "Only draft timesheets can be edited" });
 
-  const { entries } = req.body;
+  const { entries, notes } = req.body;
   if (!Array.isArray(entries))
     return res.status(400).json({ error: "entries must be an array" });
   if (entries.length > 7)
@@ -231,6 +231,14 @@ router.put("/:id/entries", requireAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    if (notes !== undefined) {
+      await client.query("UPDATE timesheets SET notes = $1 WHERE id = $2", [
+        notes ?? null,
+        sheet.id,
+      ]);
+    }
+
     for (const row of entries) {
       await client.query(
         `

@@ -27,6 +27,7 @@ export interface Timesheet {
   user_id: number;
   week_start: string; // yyyy-MM-dd
   status: TimesheetStatus;
+  notes?: string | null;
   admin_note?: string | null;
   submitted_at?: string | null;
   present_days?: number;
