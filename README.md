@@ -8,6 +8,7 @@ Full-stack timesheet management system for tracking worker hours, submitting tim
 
 - Log in with email/password and submit weekly timesheets (Mon–Sun)
 - Each day: Present/Absent toggle, hours worked, work type (Remote / On-site / Leave / Holiday), optional notes
+- **Week notes** — add a free-text note to the whole timesheet (e.g. "On client site all week"), visible to admins during review
 - Save as draft, submit for review, or recall a submitted sheet before it's approved
 - **Copy last week** — copy prior week's entries into a new draft in one click
 - **Leave balance tracker** — see allocated vs used leave days for the year
@@ -151,17 +152,17 @@ timesheet-app/
 
 ## Data Model
 
-| Table               | Key columns                                                                                                          |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `users`             | `id`, `email`, `name`, `password_hash`, `role` (`worker`\|`team_lead`\|`admin`)                                      |
-| `timesheets`        | `id`, `user_id`, `week_start`, `status` (`draft`\|`submitted`\|`approved`\|`rejected`), `admin_note`, `submitted_at` |
-| `timesheet_entries` | `id`, `timesheet_id`, `date`, `is_present`, `hours`, `work_type` (`Remote`\|`On-site`\|`Leave`\|`Holiday`), `notes`  |
-| `teams`             | `id`, `name`, `description`                                                                                          |
-| `team_members`      | `team_id`, `user_id`, `is_lead`                                                                                      |
-| `public_holidays`   | `id`, `date`, `name`                                                                                                 |
-| `leave_balances`    | `user_id`, `year`, `allocated_days`                                                                                  |
-| `app_settings`      | `key`, `value` (e.g. `overtime_threshold_hours = 8`)                                                                 |
-| `audit_logs`        | `id`, `actor_id`, `actor_name`, `action`, `target_type`, `target_id`, `target_name`, `metadata`, `created_at`        |
+| Table               | Key columns                                                                                                                   |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `users`             | `id`, `email`, `name`, `password_hash`, `role` (`worker`\|`team_lead`\|`admin`)                                               |
+| `timesheets`        | `id`, `user_id`, `week_start`, `status` (`draft`\|`submitted`\|`approved`\|`rejected`), `notes`, `admin_note`, `submitted_at` |
+| `timesheet_entries` | `id`, `timesheet_id`, `date`, `is_present`, `hours`, `work_type` (`Remote`\|`On-site`\|`Leave`\|`Holiday`), `notes`           |
+| `teams`             | `id`, `name`, `description`                                                                                                   |
+| `team_members`      | `team_id`, `user_id`, `is_lead`                                                                                               |
+| `public_holidays`   | `id`, `date`, `name`                                                                                                          |
+| `leave_balances`    | `user_id`, `year`, `allocated_days`                                                                                           |
+| `app_settings`      | `key`, `value` (e.g. `overtime_threshold_hours = 8`)                                                                          |
+| `audit_logs`        | `id`, `actor_id`, `actor_name`, `action`, `target_type`, `target_id`, `target_name`, `metadata`, `created_at`                 |
 
 ---
 
