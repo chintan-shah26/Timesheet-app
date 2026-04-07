@@ -9,4 +9,4 @@
 | 5   | Admin & manager experience: bulk approve, submission reminder emails                                                    | implemented | 3            |
 | 6   | Reporting enhancements: dashboard charts, overtime tracking, PDF export                                                 | implemented | 3            |
 | 7   | Platform & governance: audit log for all timesheet and user actions                                                     | implemented | —            |
-| 8   | Timesheet-level notes: worker free-text note on the whole timesheet, editable in draft, visible in admin review         | specifying  | —            |
+| 8   | Timesheet-level notes: worker free-text note on the whole timesheet, editable in draft, visible in admin review         | implemented | —            |
